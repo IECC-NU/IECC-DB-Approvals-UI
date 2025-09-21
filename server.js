@@ -10,50 +10,58 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' ? 
-        process.env.FRONTEND_URL || 'https://your-app-name.up.railway.app' : 
-        'http://localhost:3000',
+        [process.env.FRONTEND_URL, 'https://*.up.railway.app'] : 
+        ['http://localhost:3000', 'http://127.0.0.1:3000'],
     credentials: true
 }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// PostgreSQL configuration
+// PostgreSQL configuration with Railway environment variables
 const pool = new Pool({
-    host: process.env.PGHOST || process.env.DB_HOST,
-    port: process.env.PGPORT || process.env.DB_PORT,
-    user: process.env.PGUSER || process.env.DB_USER,
-    password: process.env.PGPASSWORD || process.env.DB_PASSWORD,
-    database: process.env.PGDATABASE || process.env.DB_NAME,
+    host: process.env.PGHOST,
+    port: process.env.PGPORT,
+    user: process.env.PGUSER,
+    password: process.env.PGPASSWORD,
+    database: process.env.PGDATABASE,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Custom authentication middleware with database check
+// Enhanced authentication middleware with database check
 const requireAuthWithDbCheck = async (req, res, next) => {
     try {
         // First, check if user is authenticated with Clerk
         await ClerkExpressRequireAuth()(req, res, async () => {
             try {
-                // Get user email from Clerk
-                const userEmail = req.auth.claims?.email?.toLowerCase();
+                // Get user email from Clerk - try multiple possible locations
+                const userEmail = req.auth.claims?.email?.toLowerCase() || 
+                                 req.auth.claims?.email_address?.toLowerCase() ||
+                                 req.auth.claims?.primaryEmailAddress?.emailAddress?.toLowerCase();
                 
                 if (!userEmail) {
+                    console.log('No email found in Clerk claims:', req.auth.claims);
                     return res.status(403).json({ error: 'Email not found in authentication token' });
                 }
+
+                console.log('Checking authorization for email:', userEmail);
 
                 // Check if user exists in authentication table
                 const client = await pool.connect();
                 const result = await client.query(
-                    'SELECT employee_email, employee_name, employee_nuid FROM authentication WHERE employee_email = $1',
+                    'SELECT employee_email, employee_name, employee_nuid FROM authentication WHERE LOWER(employee_email) = $1',
                     [userEmail]
                 );
                 client.release();
 
                 if (result.rows.length === 0) {
+                    console.log('User not authorized:', userEmail);
                     return res.status(403).json({ 
                         error: 'Access denied. Your email is not authorized for this system.',
                         email: userEmail
                     });
                 }
+
+                console.log('User authorized:', userEmail);
 
                 // Add user info to request for use in routes
                 req.user = {
@@ -196,7 +204,8 @@ app.get('/api/test', async (req, res) => {
         res.json({
             message: 'Database connection successful',
             data: result.rows[0],
-            env: process.env.NODE_ENV || 'development'
+            env: process.env.NODE_ENV || 'development',
+            clerkConfigured: !!process.env.CLERK_SECRET_KEY
         });
     } catch (error) {
         console.error('Database error:', error);
@@ -218,15 +227,23 @@ app.get('/dashboard', (req, res) => {
 
 // Health check for Railway
 app.get('/health', (req, res) => {
-    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development'
+    });
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log('🔐 Clerk authentication configured');
-    console.log('🗃️ PostgreSQL connection configured');
+    console.log(`🔐 Clerk configured: ${!!process.env.CLERK_SECRET_KEY}`);
+    console.log(`🗃️ Database configured: ${!!process.env.PGHOST}`);
+    
+    if (process.env.NODE_ENV === 'production') {
+        console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
+    }
 });
 
 // Test database connection on startup
@@ -234,8 +251,11 @@ async function testConnection() {
     try {
         const client = await pool.connect();
         const result = await client.query('SELECT COUNT(*) as employee_count FROM employee');
+        const authResult = await client.query('SELECT COUNT(*) as authorized_count FROM authentication');
+        
         console.log('✅ PostgreSQL Database connected successfully');
         console.log(`📊 Found ${result.rows[0].employee_count} employees in database`);
+        console.log(`🔐 Found ${authResult.rows[0].authorized_count} authorized users`);
         client.release();
     } catch (error) {
         console.error('❌ Database connection failed:', error.message);
