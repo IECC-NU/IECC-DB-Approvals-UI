@@ -22,23 +22,23 @@
             min-height: 100vh;
             display: grid;
             place-items: center;
-            background: linear-gradient(135deg, #0072bc 0%, #004c8c 100%);
+            background: linear-gradient(135deg, #0a68b1 0%, #075189 100%);
             padding: 24px;
         }
 
         .shell {
             width: 100%;
             max-width: 520px;
-            background: rgba(255, 255, 255, .97);
+            background: rgba(255, 255, 255, .98);
             border-radius: 20px;
-            padding: 32px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, .12);
+            padding: 28px 28px 22px;
+            box-shadow: 0 22px 45px rgba(0, 0, 0, .15);
             backdrop-filter: blur(10px);
         }
 
         .hdr {
             text-align: center;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         .hdr img {
@@ -48,25 +48,66 @@
 
         .hdr h1 {
             margin: 0;
-            color: #004c8c;
-            font-size: 1.8rem;
+            color: #0c4a6e;
+            font-size: 1.9rem;
         }
 
         .hdr p {
             margin: 6px 0 0;
-            color: #0072bc;
-            font-weight: 500;
+            color: #0ea5e9;
+            font-weight: 600;
         }
 
         .note {
-            margin-top: 16px;
+            margin-top: 14px;
             font-size: .9rem;
             color: #1e40af;
             background: linear-gradient(135deg, #eff6ff, #dbeafe);
             border: 1px solid #93c5fd;
             border-radius: 12px;
-            padding: 12px 14px;
+            padding: 10px 12px;
             text-align: center;
+        }
+
+        /* Fallback button (hosted sign-in) */
+        .fallback {
+            display: none;
+            /* shown only if embed fails */
+            margin-top: 16px;
+            text-align: center;
+        }
+
+        .btn {
+            appearance: none;
+            border: 0;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-weight: 700;
+            cursor: pointer;
+            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            color: #fff;
+            box-shadow: 0 8px 20px rgba(2, 132, 199, .35);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        /* Error banner (visible details for debugging) */
+        .err {
+            display: none;
+            margin-top: 14px;
+            color: #7f1d1d;
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: .88rem;
+            white-space: pre-wrap;
         }
     </style>
 </head>
@@ -79,15 +120,41 @@
             <p>Secure sign-in for WTR approvals</p>
         </div>
 
+        <!-- Clerk will try to mount here -->
         <div id="clerk-sign-in"></div>
 
-        <div class="note">
-            🔒 This system is restricted to authorized IECC managers only.
+        <!-- Fallback if the embed doesn’t mount -->
+        <div class="fallback" id="fallback">
+            <button class="btn" id="openHosted">Continue with Clerk</button>
+            <div style="margin-top:8px;font-size:.85rem;color:#475569">
+                If the embedded sign-in doesn’t appear, use the hosted sign-in.
+            </div>
         </div>
+
+        <div class="note">🔒 This system is restricted to authorized IECC managers only.</div>
+        <div class="err" id="err"></div>
     </div>
 
     <script>
         (async () => {
+            const errBox = document.getElementById('err');
+            const fallback = document.getElementById('fallback');
+            const openHosted = document.getElementById('openHosted');
+
+            // Hosted flow fallback
+            openHosted.addEventListener('click', () => {
+                if (window.Clerk && typeof window.Clerk.redirectToSignIn === 'function') {
+                    window.Clerk.redirectToSignIn({
+                        afterSignInUrl: '/dashboard',
+                        afterSignUpUrl: '/dashboard'
+                    });
+                } else {
+                    // worst-case: hard redirect to Clerk’s default (will still resolve based on your instance)
+                    window.location.href = '/sign-in';
+                }
+            });
+
+            // Wait for Clerk to be ready
             const waitForClerk = () => new Promise((resolve, reject) => {
                 const start = Date.now();
                 const t = setInterval(() => {
@@ -96,24 +163,44 @@
                 }, 50);
             });
 
+            function showErr(e) {
+                console.error(e);
+                errBox.textContent = 'Auth error: ' + (e?.message || e);
+                errBox.style.display = 'block';
+                fallback.style.display = 'block';
+            }
+
             try {
                 await waitForClerk();
                 await window.Clerk.load();
 
-                // Already signed in? go to dashboard
+                // Already signed in? Go straight to dashboard
                 if (window.Clerk.user) {
                     window.location.href = '/dashboard';
                     return;
                 }
 
-                window.Clerk.mountSignIn({
-                    element: '#clerk-sign-in',
-                    afterSignInUrl: '/dashboard',
-                    afterSignUpUrl: '/dashboard'
-                });
+                // Try to mount embedded widget
+                try {
+                    window.Clerk.mountSignIn({
+                        element: '#clerk-sign-in',
+                        afterSignInUrl: '/dashboard',
+                        afterSignUpUrl: '/dashboard'
+                    });
+
+                    // If nothing rendered in 1s, expose fallback
+                    setTimeout(() => {
+                        const host = document.getElementById('clerk-sign-in');
+                        const empty = !host || host.children.length === 0;
+                        if (empty) {
+                            fallback.style.display = 'block';
+                        }
+                    }, 1000);
+                } catch (mountErr) {
+                    showErr(mountErr);
+                }
             } catch (e) {
-                alert('Failed to load authentication. Please refresh.');
-                console.error(e);
+                showErr(e);
             }
         })();
     </script>
