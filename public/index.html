@@ -12,7 +12,6 @@
     </script>
 
   <style>
-    /* === Your original styles kept, with tiny polish === */
     * {
       margin: 0;
       padding: 0;
@@ -479,26 +478,19 @@
         await window.Clerk.load();
 
         if (!window.Clerk.user) {
-          // Not signed in → go to Sign-in page
-          window.location.href = 'Sign-in.html';
+          window.location.href = '/sign-in';
           return;
         }
 
-        // Show user chip
         const u = window.Clerk.user;
         const name = u.fullName || (u.firstName ? (u.firstName + ' ' + (u.lastName || '')) : (u.primaryEmailAddress?.emailAddress || 'Signed in'));
         const email = u.primaryEmailAddress?.emailAddress || '';
         document.getElementById('userDisplay').textContent = email ? `${name} (${email})` : name;
 
         document.getElementById('signOutBtn').onclick = async () => {
-          try {
-            await window.Clerk.signOut();
-          } finally {
-            window.location.href = 'Sign-in.html';
-          }
+          try { await window.Clerk.signOut(); } finally { window.location.href = '/sign-in'; }
         };
 
-        // When Clerk is ready & authenticated → boot approvals app
         initApprovalsApp();
       } catch (err) {
         alert('Failed to initialize authentication. Please refresh.');
@@ -506,7 +498,7 @@
       }
     })();
 
-    // ----- Approvals app (your original logic, kept) -----
+    // ----- Approvals Logic -----
     let wtrData = [];
     let filteredData = [];
     let currentPage = 1;
@@ -563,7 +555,6 @@
 
         const sel = document.getElementById('departmentFilter');
         sel.innerHTML = '<option value="all">All Departments</option>';
-        // Accept array of strings OR array of objects with department_name
         (departments || []).forEach(d => {
           const name = typeof d === 'string' ? d : (d.department_name || d.department || d.name || '');
           if (!name) return;
@@ -632,7 +623,7 @@
           </td>
           <td>
             <strong>${getMonthName(record.wtr_month)} ${record.wtr_year}</strong><br>
-            <small>WTR ID: ${record.coda_wtr_id || record.wtr_id || '-'}</small>
+            <small>WTR ID: ${record.wtr_id || '-'}</small>
           </td>
           <td>
             <div class="hours-info">
@@ -667,7 +658,6 @@
         </tr>
       `).join('');
 
-      // Pagination controls
       const totalPages = Math.ceil(filteredData.length / rowsPerPage);
       document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
       document.getElementById('prevBtn').disabled = currentPage === 1;
@@ -701,7 +691,6 @@
           body: JSON.stringify({ status: newStatus })
         });
         if (!res.ok) throw new Error('Failed to update status');
-        // Reflect locally
         const i = wtrData.findIndex(r => r.wtr_id === wtrId);
         if (i !== -1) wtrData[i].status = newStatus;
         applyFilters();

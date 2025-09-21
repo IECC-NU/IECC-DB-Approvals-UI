@@ -4,38 +4,32 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// ✅ Latest Clerk express middleware
-const { ClerkExpressWithAuth, requireAuth } = require('@clerk/express');
+// ✅ Clerk (API compatible with your environment)
+const { ClerkExpressRequireAuth } = require('@clerk/express');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ---------- CORS (allow your Railway URL + optional custom FRONTEND_URL) ----------
-const allowedOrigins = [
-  process.env.FRONTEND_URL,      // e.g. https://iecc-db-approvals-ui.up.railway.app
-].filter(Boolean);
-
+/* ------------------------- CORS (Railway) ------------------------- */
+const allowedOrigins = [process.env.FRONTEND_URL].filter(Boolean);
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // allow same-origin/non-browser
-    // allow *.up.railway.app
-    const railwayOk = /\.up\.railway\.app$/.test(new URL(origin).host);
-    if (railwayOk) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error('Not allowed by CORS: ' + origin));
+    if (!origin) return cb(null, true); // same-origin / curl
+    try {
+      const host = new URL(origin).host;
+      const railwayOK = /\.up\.railway\.app$/.test(host);
+      if (railwayOK) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error('Not allowed by CORS: ' + origin));
+    } catch {
+      return cb(new Error('Invalid Origin'));
+    }
   },
   credentials: true
 }));
-
 app.use(express.json());
 
-// ---------- Clerk (global) ----------
-app.use(ClerkExpressWithAuth({
-  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-  secretKey: process.env.CLERK_SECRET_KEY
-}));
-
-// ---------- Postgres ----------
+/* ---------------------------- Postgres ---------------------------- */
 const pool = new Pool({
   host: process.env.PGHOST || process.env.DB_HOST,
   port: Number(process.env.PGPORT || process.env.DB_PORT || 5432),
@@ -45,7 +39,9 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+/* ------------------------- Auth utilities ------------------------- */
 function getEmailFromClaims(claims = {}) {
+  // Try common Clerk claim shapes
   return (
     (claims.email && String(claims.email)) ||
     (claims.email_address && String(claims.email_address)) ||
@@ -55,18 +51,19 @@ function getEmailFromClaims(claims = {}) {
   );
 }
 
-// ---------- Auth + DB allow-list ----------
-async function requireAuthWithDbCheck(req, res, next) {
-  return requireAuth()(req, res, async () => {
+function requireAuthWithDbCheck(req, res, next) {
+  // First enforce a valid session, then run our DB allow-list
+  return ClerkExpressRequireAuth()(req, res, async () => {
     try {
-      const emailRaw =
+      const email =
         getEmailFromClaims(req.auth?.sessionClaims) ||
         getEmailFromClaims(req.auth?.claims);
-      if (!emailRaw) {
+
+      if (!email) {
         return res.status(403).json({ error: 'Email not found in session' });
       }
 
-      const userEmail = emailRaw.toLowerCase();
+      const userEmail = String(email).toLowerCase();
       const client = await pool.connect();
       const q = `
         SELECT employee_email, employee_name, employee_nuid
@@ -96,15 +93,15 @@ async function requireAuthWithDbCheck(req, res, next) {
   });
 }
 
-// ===================== API ROUTES =====================
+/* ----------------------------- API ----------------------------- */
 
-// Current user
+// Current user (used by header chip in the UI)
 app.get('/api/user', requireAuthWithDbCheck, (req, res) => {
   res.json({ authenticated: true, user: req.user });
 });
 
-// Example: Departments
-app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
+// Departments
+app.get('/api/departments', requireAuthWithDbCheck, async (_req, res) => {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(`
@@ -121,14 +118,15 @@ app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
-// Example: WTR combined view
-app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
+// WTR list
+app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(`
       SELECT 
         wtr.wtr_id, wtr.wtr_month, wtr.wtr_year, wtr.status,
-        e.employee_nuid, e.employee_name, e.employee_email,
+        wtr.total_submitted_hours, wtr.expected_hours,
+        e.employee_nuid, e.employee_name, e.employee_email, e.employee_title,
         d.department_name
       FROM wtr
       JOIN employee e ON wtr.employee_nuid = e.employee_nuid
@@ -144,65 +142,55 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
-// Health
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    node: process.version,
-    env: process.env.NODE_ENV || 'development'
-  });
+// Update WTR status
+app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
+  const id = Number(req.params.id);
+  const { status } = req.body || {};
+  const allowed = new Set(['pending', 'approved', 'rejected']);
+  if (!allowed.has(String(status || '').toLowerCase())) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query(`UPDATE wtr SET status = $1 WHERE wtr_id = $2`, [status, id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Update status error:', e);
+    res.status(500).json({ error: 'Failed to update status' });
+  } finally {
+    client.release();
+  }
 });
 
-// ===================== STATIC / HTML =====================
+/* ------------------------ HTML / Static ------------------------ */
 
-// We’ll serve index.html and inject your publishable key at runtime.
-function serveIndex(req, res) {
-  // Support both /public/index.html and root /index.html so you don’t have to move files.
-  const publicPath = path.join(__dirname, 'public', 'index.html');
-  const rootPath = path.join(__dirname, 'index.html');
-  const filePath = fs.existsSync(publicPath) ? publicPath : rootPath;
-
-  fs.readFile(filePath, 'utf8', (err, html) => {
-    if (err) {
-      console.error('Failed to read index.html:', err);
-      return res.status(500).send('Server error');
-    }
-    const injected = html.replace(/\$\{CLERK_PUBLISHABLE_KEY\}/g, process.env.CLERK_PUBLISHABLE_KEY || '');
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(injected);
-  });
+// Helper: serve HTML and inject ${CLERK_PUBLISHABLE_KEY}
+function serveHtml(fileName) {
+  return (req, res) => {
+    const p1 = path.join(__dirname, 'public', fileName);
+    const p2 = path.join(__dirname, fileName);
+    const filePath = fs.existsSync(p1) ? p1 : p2;
+    fs.readFile(filePath, 'utf8', (err, html) => {
+      if (err) return res.status(500).send('Server error');
+      const injected = html.replace(/\$\{CLERK_PUBLISHABLE_KEY\}/g, process.env.CLERK_PUBLISHABLE_KEY || '');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(injected);
+    });
+  };
 }
 
-app.get('/', serveIndex);
-app.get('/dashboard', serveIndex);
+// Default route → Sign-in page
+app.get('/', serveHtml('Sign-in.html'));
+// Pretty routes:
+app.get('/sign-in', serveHtml('Sign-in.html'));
+app.get('/dashboard', serveHtml('index.html'));
 
-// Static files if you keep a /public folder
+// Static assets (optional /public)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ===================== STARTUP =====================
-async function testConnection() {
-  try {
-    const client = await pool.connect();
-    const { rows: ec } = await client.query('SELECT COUNT(*)::int AS c FROM employee');
-    const { rows: ac } = await client.query('SELECT COUNT(*)::int AS c FROM authentication');
-    client.release();
-
-    console.log('✅ PostgreSQL connected');
-    console.log(`📊 Employees: ${ec[0].c} | Authorized: ${ac[0].c}`);
-    console.log(`🔑 Clerk publishable key present: ${!!process.env.CLERK_PUBLISHABLE_KEY}`);
-    console.log(`🌐 FRONTEND_URL: ${process.env.FRONTEND_URL || '(not set)'} | NODE_ENV=${process.env.NODE_ENV || 'development'}`);
-  } catch (error) {
-    console.error('❌ DB connection failed:', error.message);
-  }
-}
-
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM: closing DB pool');
-  pool.end(() => process.exit(0));
-});
-
+/* --------------------------- Start --------------------------- */
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  testConnection();
+  console.log(`🔑 Clerk publishable key present: ${!!process.env.CLERK_PUBLISHABLE_KEY}`);
+  console.log(`🌐 FRONTEND_URL: ${process.env.FRONTEND_URL || '(not set)'}`);
 });

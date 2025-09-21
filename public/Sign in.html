@@ -79,7 +79,6 @@
             <p>Secure sign-in for WTR approvals</p>
         </div>
 
-        <!-- Clerk will mount the sign-in component here -->
         <div id="clerk-sign-in"></div>
 
         <div class="note">
@@ -88,16 +87,12 @@
     </div>
 
     <script>
-        // Wait for Clerk to load, then mount the SignIn widget OR redirect if already signed in
         (async () => {
             const waitForClerk = () => new Promise((resolve, reject) => {
                 const start = Date.now();
                 const t = setInterval(() => {
-                    if (window.Clerk && typeof window.Clerk.load === 'function') {
-                        clearInterval(t); resolve();
-                    } else if (Date.now() - start > 10000) {
-                        clearInterval(t); reject(new Error('Clerk SDK not loaded in time'));
-                    }
+                    if (window.Clerk && typeof window.Clerk.load === 'function') { clearInterval(t); resolve(); }
+                    else if (Date.now() - start > 10000) { clearInterval(t); reject(new Error('Clerk SDK not loaded in time')); }
                 }, 50);
             });
 
@@ -105,19 +100,16 @@
                 await waitForClerk();
                 await window.Clerk.load();
 
-                // Already signed in? go straight to approvals
+                // Already signed in? go to dashboard
                 if (window.Clerk.user) {
-                    window.location.href = 'index.html';
+                    window.location.href = '/dashboard';
                     return;
                 }
 
-                // Mount Clerk SignIn
                 window.Clerk.mountSignIn({
                     element: '#clerk-sign-in',
-                    // After successful sign-in, send managers to approvals
-                    afterSignInUrl: 'index.html',
-                    // After sign-up (if allowed), also send to approvals
-                    afterSignUpUrl: 'index.html'
+                    afterSignInUrl: '/dashboard',
+                    afterSignUpUrl: '/dashboard'
                 });
             } catch (e) {
                 alert('Failed to load authentication. Please refresh.');
