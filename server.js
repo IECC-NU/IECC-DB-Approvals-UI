@@ -180,9 +180,9 @@ function serveHtml(fileName) {
 }
 
 // Default route → Sign-in page
-app.get('/', serveHtml('Sign-in.html'));
+app.get('/', serveHtml('Sign in.html'));
 // Pretty routes:
-app.get('/sign-in', serveHtml('Sign-in.html'));
+app.get('/sign-in', serveHtml('Sign in.html'));
 app.get('/dashboard', serveHtml('index.html'));
 
 // Static assets (optional /public)
