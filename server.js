@@ -317,47 +317,28 @@ app.get('/api/departments', requireAuthWithDbCheck, async (_req, res) => {
 });
 
 // WTR list (work_time_records + employee + department + aggregated activities)
+// WTR list
 app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(`
-      SELECT
-        w.wtr_id,
-        w.wtr_month,
-        w.wtr_year,
-        w.total_submitted_hours,
-        w.expected_hours,
-        w.approval_status AS status,
-        e.employee_nuid,
-        e.employee_name,
-        e.employee_email,
+      SELECT 
+        wtr.wtr_id, 
+        wtr.wtr_month, 
+        wtr.wtr_year, 
+        wtr.approval_status AS status,
+        wtr.total_submitted_hours, 
+        wtr.expected_hours,
+        e.employee_nuid, 
+        e.employee_name, 
+        e.employee_email, 
         e.employee_title,
-        d.department_name,
-        COALESCE(
-          json_agg(
-            DISTINCT jsonb_build_object(
-              'coda_log_id', dsl.coda_log_id,
-              'project_name', p.deal_name,
-              'service_line', a.service_line,
-              'activity_name', a.activity_name,
-              'hours_submitted', dsl.hours_submitted,
-              'tech_report_description', dsl.tech_report_description
-            )
-          ) FILTER (WHERE dsl.log_id IS NOT NULL),
-          '[]'
-        ) AS activities
-      FROM work_time_records w
-      JOIN employee e ON e.employee_nuid = w.employee_nuid
-      LEFT JOIN department d ON d.department_id = e.department_id
-      LEFT JOIN details_submission_logs dsl ON dsl.coda_wtr_id = w.coda_wtr_id
-      LEFT JOIN activity a ON a.activity_id = dsl.activity_id
-      LEFT JOIN projects p ON p.project_id = dsl.project_id
-      GROUP BY
-        w.wtr_id, w.wtr_month, w.wtr_year, w.total_submitted_hours, w.expected_hours, w.approval_status,
-        e.employee_nuid, e.employee_name, e.employee_email, e.employee_title, d.department_name
-      ORDER BY w.wtr_year DESC, w.wtr_month DESC, e.employee_name
+        d.department_name
+      FROM work_time_records wtr
+      JOIN employee e ON wtr.employee_nuid = e.employee_nuid
+      LEFT JOIN department d ON e.department_id = d.department_id
+      ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
     `);
-
     res.json(rows);
   } catch (e) {
     console.error('WTR error:', e);
@@ -366,6 +347,7 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
     client.release();
   }
 });
+
 
 // Update WTR status (maps to approval_status)
 app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
