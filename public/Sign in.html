@@ -2,552 +2,128 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IECC WTR Manager - Sign In</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IECC WTR Manager – Sign In</title>
+
+    <!-- Clerk (latest) -->
+    <script async crossorigin="anonymous" data-clerk-publishable-key="${CLERK_PUBLISHABLE_KEY}"
+        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
+        </script>
+
     <style>
         * {
-            margin: 0;
-            padding: 0;
             box-sizing: border-box;
         }
 
         body {
+            margin: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0072bc 0%, #004c8c 100%);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #0072bc 0%, #004c8c 100%);
+            padding: 24px;
         }
 
-        .signin-container {
-            max-width: 500px;
+        .shell {
             width: 100%;
-            background: rgba(255, 255, 255, 0.97);
+            max-width: 520px;
+            background: rgba(255, 255, 255, .97);
             border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 32px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, .12);
             backdrop-filter: blur(10px);
+        }
+
+        .hdr {
             text-align: center;
+            margin-bottom: 16px;
         }
 
-        .header {
-            margin-bottom: 40px;
+        .hdr img {
+            max-height: 72px;
+            margin-bottom: 12px;
         }
 
-        .header img {
-            max-height: 80px;
-            margin-bottom: 20px;
-        }
-
-        .header h1 {
-            font-size: 2.2rem;
-            font-weight: bold;
+        .hdr h1 {
+            margin: 0;
             color: #004c8c;
-            margin-bottom: 10px;
+            font-size: 1.8rem;
         }
 
-        .header p {
-            font-size: 1.1rem;
+        .hdr p {
+            margin: 6px 0 0;
             color: #0072bc;
             font-weight: 500;
         }
 
-        .signin-form {
-            text-align: left;
-        }
-
-        .form-group {
-            margin-bottom: 25px;
-        }
-
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            color: #004c8c;
-            font-size: 1rem;
-            margin-bottom: 8px;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 15px 18px;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: white;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #0072bc;
-            box-shadow: 0 0 0 3px rgba(0, 114, 188, 0.15);
-            transform: translateY(-1px);
-        }
-
-        .form-group input::placeholder {
-            color: #9ca3af;
-        }
-
-        .btn {
-            width: 100%;
-            padding: 15px 20px;
-            border: none;
-            border-radius: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-            margin-bottom: 20px;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #0072bc, #004c8c);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0, 76, 140, 0.3);
-        }
-
-        .btn-secondary {
-            background: linear-gradient(135deg, #16a34a, #15803d);
-            color: white;
-        }
-
-        .btn-secondary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(22, 163, 74, 0.3);
-        }
-
-        .btn:disabled {
-            background: #d1d5db;
-            color: #9ca3af;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .alert {
-            padding: 15px 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            font-weight: 500;
-            display: none;
-        }
-
-        .alert-success {
-            background: linear-gradient(135deg, #dcfce7, #bbf7d0);
-            color: #166534;
-            border: 1px solid #86efac;
-        }
-
-        .alert-error {
-            background: linear-gradient(135deg, #fef2f2, #fecaca);
-            color: #991b1b;
-            border: 1px solid #fca5a5;
-        }
-
-        .alert-info {
-            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+        .note {
+            margin-top: 16px;
+            font-size: .9rem;
             color: #1e40af;
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
             border: 1px solid #93c5fd;
-        }
-
-        .loading-spinner {
-            display: none;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #ffffff;
-            border-top: 2px solid transparent;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 10px;
-            display: inline-block;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .step-indicator {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 30px;
-        }
-
-        .step {
-            display: flex;
-            align-items: center;
-            color: #9ca3af;
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-
-        .step.active {
-            color: #0072bc;
-        }
-
-        .step-number {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: #e5e7eb;
-            color: #6b7280;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 8px;
-            font-weight: 600;
-            font-size: 0.8rem;
-        }
-
-        .step.active .step-number {
-            background: linear-gradient(135deg, #0072bc, #004c8c);
-            color: white;
-        }
-
-        .step-separator {
-            width: 40px;
-            height: 1px;
-            background: #e5e7eb;
-            margin: 0 15px;
-        }
-
-        .security-info {
-            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-            border: 1px solid #bae6fd;
             border-radius: 12px;
-            padding: 20px;
-            margin-top: 30px;
+            padding: 12px 14px;
             text-align: center;
-        }
-
-        .security-info h3 {
-            color: #004c8c;
-            font-size: 1.1rem;
-            margin-bottom: 10px;
-        }
-
-        .security-info p {
-            color: #0369a1;
-            font-size: 0.9rem;
-            line-height: 1.5;
-        }
-
-        @media (max-width: 768px) {
-            .signin-container {
-                padding: 30px;
-                margin: 10px;
-            }
-
-            .header h1 {
-                font-size: 1.8rem;
-            }
-
-            .step-separator {
-                width: 20px;
-            }
         }
     </style>
 </head>
 
 <body>
-    <div class="signin-container">
-        <div class="header">
-            <img src="IECC Logo.png" alt="IECC Logo" style="display: block; margin: 0 auto;">
+    <div class="shell">
+        <div class="hdr">
+            <img src="IECC Logo.png" alt="IECC" />
             <h1>Manager Access</h1>
-            <p>Secure authentication for WTR management</p>
+            <p>Secure sign-in for WTR approvals</p>
         </div>
 
-        <div class="step-indicator">
-            <div class="step active" id="step1">
-                <div class="step-number">1</div>
-                <span>Email Verification</span>
-            </div>
-            <div class="step-separator"></div>
-            <div class="step" id="step2">
-                <div class="step-number">2</div>
-                <span>Password Entry</span>
-            </div>
-        </div>
+        <!-- Clerk will mount the sign-in component here -->
+        <div id="clerk-sign-in"></div>
 
-        <!-- Email Verification Step -->
-        <div id="emailStep" class="signin-form">
-            <div id="alertContainer"></div>
-            
-            <div class="form-group">
-                <label for="email">Manager Email Address</label>
-                <input type="email" id="email" placeholder="Enter your IECC manager email" required>
-            </div>
-            
-            <button type="button" class="btn btn-primary" onclick="verifyEmail()" id="verifyBtn">
-                <span class="loading-spinner" id="emailSpinner" style="display: none;"></span>
-                Verify Email
-            </button>
-        </div>
-
-        <!-- Password Entry Step -->
-        <div id="passwordStep" class="signin-form" style="display: none;">
-            <div id="passwordAlertContainer"></div>
-            
-            <div class="form-group">
-                <label for="password">Enter Your Password</label>
-                <input type="password" id="password" placeholder="Enter the password from your email" required>
-            </div>
-            
-            <button type="button" class="btn btn-primary" onclick="signIn()" id="signinBtn">
-                <span class="loading-spinner" id="passwordSpinner" style="display: none;"></span>
-                Sign In
-            </button>
-            
-            <button type="button" class="btn btn-secondary" onclick="goBackToEmail()" style="background: #6b7280;">
-                Back to Email
-            </button>
-        </div>
-
-        <div class="security-info">
-            <h3>🔒 Secure Access</h3>
-            <p>This system is restricted to authorized IECC managers only. Your access credentials are sent securely to your registered email address.</p>
+        <div class="note">
+            🔒 This system is restricted to authorized IECC managers only.
         </div>
     </div>
 
     <script>
-        let currentEmail = '';
-        
-        // Mock database of authorized managers (this would be replaced with actual API calls)
-        const authorizedManagers = [
-            {
-                employee_name: "Ahmed Saleh",
-                employee_id: "MGR001",
-                employee_email: "M.Rashwan@nu.edu.eg",
-                password_hash: generateSecurePassword()
-            },
-            {
-                employee_name: "Sarah Director",
-                employee_id: "MGR002", 
-                employee_email: "sarah.director@iecc.edu",
-                password_hash: generateSecurePassword()
-            }
-        ];
-
-        function generateSecurePassword() {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-            let password = '';
-            for (let i = 0; i < 12; i++) {
-                password += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return password;
-        }
-
-        function showAlert(containerId, type, message) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = `
-                <div class="alert alert-${type}" style="display: block;">
-                    ${message}
-                </div>
-            `;
-            
-            // Auto-hide success messages after 5 seconds
-            if (type === 'success') {
-                setTimeout(() => {
-                    const alert = container.querySelector('.alert');
-                    if (alert) {
-                        alert.style.display = 'none';
+        // Wait for Clerk to load, then mount the SignIn widget OR redirect if already signed in
+        (async () => {
+            const waitForClerk = () => new Promise((resolve, reject) => {
+                const start = Date.now();
+                const t = setInterval(() => {
+                    if (window.Clerk && typeof window.Clerk.load === 'function') {
+                        clearInterval(t); resolve();
+                    } else if (Date.now() - start > 10000) {
+                        clearInterval(t); reject(new Error('Clerk SDK not loaded in time'));
                     }
-                }, 5000);
-            }
-        }
-
-        function clearAlerts() {
-            document.getElementById('alertContainer').innerHTML = '';
-            document.getElementById('passwordAlertContainer').innerHTML = '';
-        }
-
-        async function verifyEmail() {
-            const emailInput = document.getElementById('email');
-            const email = emailInput.value.trim().toLowerCase();
-            const verifyBtn = document.getElementById('verifyBtn');
-            const spinner = document.getElementById('emailSpinner');
-            
-            clearAlerts();
-            
-            if (!email) {
-                showAlert('alertContainer', 'error', 'Please enter your email address.');
-                return;
-            }
-            
-            if (!isValidEmail(email)) {
-                showAlert('alertContainer', 'error', 'Please enter a valid email address.');
-                return;
-            }
-            
-            // Show loading state
-            verifyBtn.disabled = true;
-            spinner.style.display = 'inline-block';
-            
-            try {
-                // Simulate API call to verify email
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                
-                const manager = authorizedManagers.find(m => m.employee_email.toLowerCase() === email);
-                
-                if (manager) {
-                    currentEmail = email;
-                    
-                    // Simulate sending email with password
-                    console.log(`Email sent to ${email} with password: ${manager.password_hash}`);
-                    
-                    showAlert('alertContainer', 'success', 
-                        `✓ Email verified! We've sent your secure password to <strong>${email}</strong>. Please check your email and return to complete sign-in.`
-                    );
-                    
-                    // Move to password step after a short delay
-                    setTimeout(() => {
-                        showPasswordStep();
-                    }, 2000);
-                    
-                } else {
-                    showAlert('alertContainer', 'error', 
-                        '❌ Access denied. This email is not authorized for manager access. Please contact your system administrator.'
-                    );
-                }
-            } catch (error) {
-                showAlert('alertContainer', 'error', 
-                    'An error occurred while verifying your email. Please try again.'
-                );
-            } finally {
-                verifyBtn.disabled = false;
-                spinner.style.display = 'none';
-            }
-        }
-
-        function showPasswordStep() {
-            document.getElementById('emailStep').style.display = 'none';
-            document.getElementById('passwordStep').style.display = 'block';
-            
-            // Update step indicators
-            document.getElementById('step1').classList.remove('active');
-            document.getElementById('step2').classList.add('active');
-            
-            // Focus on password field
-            document.getElementById('password').focus();
-            
-            clearAlerts();
-            showAlert('passwordAlertContainer', 'info', 
-                `Password sent to <strong>${currentEmail}</strong>. Please check your email and enter the password below.`
-            );
-        }
-
-        function goBackToEmail() {
-            document.getElementById('passwordStep').style.display = 'none';
-            document.getElementById('emailStep').style.display = 'block';
-            
-            // Update step indicators
-            document.getElementById('step2').classList.remove('active');
-            document.getElementById('step1').classList.add('active');
-            
-            clearAlerts();
-            currentEmail = '';
-        }
-
-        async function signIn() {
-            const passwordInput = document.getElementById('password');
-            const password = passwordInput.value.trim();
-            const signinBtn = document.getElementById('signinBtn');
-            const spinner = document.getElementById('passwordSpinner');
-            
-            clearAlerts();
-            
-            if (!password) {
-                showAlert('passwordAlertContainer', 'error', 'Please enter your password.');
-                return;
-            }
-            
-            // Show loading state
-            signinBtn.disabled = true;
-            spinner.style.display = 'inline-block';
-            
-            try {
-                // Simulate API call to authenticate
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                
-                const manager = authorizedManagers.find(m => 
-                    m.employee_email.toLowerCase() === currentEmail && 
-                    m.password_hash === password
-                );
-                
-                if (manager) {
-                    showAlert('passwordAlertContainer', 'success', 
-                        `✓ Authentication successful! Welcome, ${manager.employee_name}. Redirecting to dashboard...`
-                    );
-                    
-                    // Store authentication state
-                    sessionStorage.setItem('iecc_manager_auth', JSON.stringify({
-                        email: manager.employee_email,
-                        name: manager.employee_name,
-                        id: manager.employee_id,
-                        authenticated: true,
-                        timestamp: Date.now()
-                    }));
-                    
-                    // Redirect to dashboard after success message
-                    setTimeout(() => {
-                        // Replace 'dashboard.html' with your actual dashboard file name
-                        window.location.href = 'dashboard.html'; // Update this to match your dashboard file
-                    }, 2000);
-                    
-                } else {
-                    showAlert('passwordAlertContainer', 'error', 
-                        '❌ Invalid password. Please check your email for the correct password and try again.'
-                    );
-                }
-            } catch (error) {
-                showAlert('passwordAlertContainer', 'error', 
-                    'An error occurred during authentication. Please try again.'
-                );
-            } finally {
-                signinBtn.disabled = false;
-                spinner.style.display = 'none';
-            }
-        }
-
-        function isValidEmail(email) {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            return emailRegex.test(email);
-        }
-
-        // Handle Enter key presses
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('email').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    verifyEmail();
-                }
+                }, 50);
             });
-            
-            document.getElementById('password').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    signIn();
-                }
-            });
-        });
 
-        // Check if user is already authenticated
-        document.addEventListener('DOMContentLoaded', function() {
-            const auth = sessionStorage.getItem('iecc_manager_auth');
-            if (auth) {
-                const authData = JSON.parse(auth);
-                // Check if authentication is still valid (e.g., within last 8 hours)
-                const eightHours = 8 * 60 * 60 * 1000;
-                if (authData.authenticated && (Date.now() - authData.timestamp) < eightHours) {
-                    window.location.href = 'dashboard.html'; // Update this to match your dashboard file
+            try {
+                await waitForClerk();
+                await window.Clerk.load();
+
+                // Already signed in? go straight to approvals
+                if (window.Clerk.user) {
+                    window.location.href = 'index.html';
+                    return;
                 }
+
+                // Mount Clerk SignIn
+                window.Clerk.mountSignIn({
+                    element: '#clerk-sign-in',
+                    // After successful sign-in, send managers to approvals
+                    afterSignInUrl: 'index.html',
+                    // After sign-up (if allowed), also send to approvals
+                    afterSignUpUrl: 'index.html'
+                });
+            } catch (e) {
+                alert('Failed to load authentication. Please refresh.');
+                console.error(e);
             }
-        });
+        })();
     </script>
 </body>
 
