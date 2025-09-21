@@ -4,8 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IECC WTR Manager Dashboard</title>
-
+  <title>IECC WTR Manager - Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/clerk/4.70.5/clerk.browser.js"></script>
   <style>
     * {
       margin: 0;
@@ -15,172 +15,143 @@
 
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #0072bc 0%, #004c8c 100%);
-      min-height: 100vh;
-      padding: 20px;
-    }
-
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      background: rgba(255, 255, 255, 0.97);
-      border-radius: 20px;
-      padding: 30px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-      backdrop-filter: blur(10px);
+      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      color: #334155;
+      line-height: 1.6;
     }
 
     .header {
-      text-align: center;
-      margin-bottom: 40px;
-      position: relative;
+      background: linear-gradient(135deg, #0072bc 0%, #004c8c 100%);
+      color: white;
+      padding: 1rem 2rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
 
-    .header img {
-      max-height: 70px;
-      margin-bottom: 15px;
+    .header-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    .header h1 {
-      font-size: 2.3rem;
-      font-weight: bold;
-      color: #004c8c;
-      margin-bottom: 10px;
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
     }
 
-    .header p {
-      font-size: 1.1rem;
-      color: #0072bc;
-      font-weight: 500;
+    .logo {
+      height: 40px;
+    }
+
+    .title {
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .user-section {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
     }
 
     .user-info {
-      position: absolute;
-      top: 0;
-      right: 0;
-      background: rgba(0, 114, 188, 0.1);
-      border: 1px solid #bae6fd;
-      border-radius: 12px;
-      padding: 15px;
       text-align: right;
-    }
-
-    .user-info h4 {
-      color: #004c8c;
       font-size: 0.9rem;
-      margin-bottom: 8px;
-    }
-
-    .user-info p {
-      color: #0369a1;
-      font-size: 0.8rem;
-      margin-bottom: 10px;
-    }
-
-    /* Login/Loading states */
-    .auth-container {
-      text-align: center;
-      padding: 60px 20px;
-    }
-
-    .auth-loading {
-      color: #0072bc;
-      font-size: 1.2rem;
-      margin-bottom: 20px;
-    }
-
-    .auth-error {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #991b1b;
-      padding: 20px;
-      border-radius: 12px;
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    .signin-prompt {
-      background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-      border: 1px solid #bae6fd;
-      border-radius: 15px;
-      padding: 40px;
-      text-align: center;
-      margin-bottom: 30px;
-    }
-
-    .signin-prompt h2 {
-      color: #004c8c;
-      font-size: 1.6rem;
-      margin-bottom: 15px;
-    }
-
-    .signin-prompt p {
-      color: #0369a1;
-      margin-bottom: 25px;
-      line-height: 1.5;
-    }
-
-    /* Controls */
-    .controls {
-      display: flex;
-      gap: 20px;
-      margin-bottom: 30px;
-      flex-wrap: nowrap;
-      align-items: center;
-      border-top: 1px solid #e0e0e0;
-      border-bottom: 1px solid #e0e0e0;
-      padding: 10px 0;
-      overflow-x: auto;
-    }
-
-    .control-group {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      padding-right: 20px;
-      margin-right: 20px;
-      border-right: 1px solid #ccc;
-      flex-shrink: 0;
-    }
-
-    .control-group:last-of-type {
-      border-right: none;
-      margin-right: 0;
-      padding-right: 0;
-    }
-
-    .control-group label {
-      font-weight: 600;
-      color: #004c8c;
-      font-size: 0.9rem;
-    }
-
-    select,
-    input {
-      padding: 12px 16px;
-      border: 2px solid #e5e7eb;
-      border-radius: 10px;
-      font-size: 1rem;
-      transition: all 0.3s ease;
-      min-width: 150px;
-    }
-
-    select:focus,
-    input:focus {
-      outline: none;
-      border-color: #0072bc;
-      box-shadow: 0 0 0 3px rgba(0, 114, 188, 0.15);
     }
 
     .btn {
-      padding: 12px 24px;
+      padding: 0.5rem 1rem;
       border: none;
-      border-radius: 10px;
-      font-weight: 600;
+      border-radius: 8px;
       cursor: pointer;
+      font-weight: 500;
       transition: all 0.3s ease;
-      font-size: 1rem;
-      flex-shrink: 0;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 2px solid white;
+      color: white;
+    }
+
+    .btn-outline:hover {
+      background: white;
+      color: #004c8c;
+    }
+
+    .main-content {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 2rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      border-left: 4px solid #0072bc;
+    }
+
+    .stat-number {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #0072bc;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-label {
+      color: #64748b;
+      font-size: 0.9rem;
+    }
+
+    .controls {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      margin-bottom: 2rem;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .form-group label {
+      font-weight: 500;
+      color: #374151;
+      font-size: 0.9rem;
+    }
+
+    .form-control {
+      padding: 0.5rem 0.75rem;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      transition: border-color 0.3s ease;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: #0072bc;
     }
 
     .btn-primary {
@@ -189,128 +160,27 @@
     }
 
     .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(0, 76, 140, 0.3);
-    }
-
-    .btn-success {
-      background: linear-gradient(135deg, #16a34a, #15803d);
-      color: white;
-      padding: 8px 16px;
-      font-size: 0.9rem;
-    }
-
-    .btn-danger {
-      background: linear-gradient(135deg, #dc2626, #b91c1c);
-      color: white;
-      padding: 8px 16px;
-      font-size: 0.9rem;
-    }
-
-    .btn-success:hover,
-    .btn-danger:hover {
       transform: translateY(-1px);
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 4px 8px rgba(0, 76, 140, 0.3);
     }
 
-    .btn-secondary {
-      background: #6b7280;
-      color: white;
-      padding: 8px 16px;
-      font-size: 0.9rem;
-    }
-
-    .btn-secondary:hover {
-      background: #4b5563;
-      transform: translateY(-1px);
-    }
-
-    .btn-secondary:disabled {
-      background: #d1d5db;
-      color: #9ca3af;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .pagination-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 20px;
-      padding: 20px;
-      background: #f8fafc;
-      border-radius: 10px;
-      border: 1px solid #e5e7eb;
-    }
-
-    .pagination-info {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
-
-    .rows-per-page {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .rows-per-page label {
-      font-weight: 600;
-      color: #374151;
-      font-size: 0.9rem;
-    }
-
-    .rows-per-page select {
-      padding: 6px 10px;
-      min-width: 80px;
-      font-size: 0.9rem;
-    }
-
-    .pagination-buttons {
-      display: flex;
-      gap: 10px;
-    }
-
-    #pageInfo {
-      font-weight: 500;
-      color: #374151;
-      font-size: 0.9rem;
-    }
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
-      margin-bottom: 30px;
-    }
-
-    .stat-card {
-      background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-      padding: 20px;
-      border-radius: 15px;
-      text-align: center;
-      border: 1px solid #bae6fd;
-    }
-
-    .stat-card h3 {
-      font-size: 2rem;
-      font-weight: bold;
-      color: #004c8c;
-      margin-bottom: 5px;
-    }
-
-    .stat-card p {
-      color: #0369a1;
-      font-weight: 500;
-    }
-
-    .table-container {
+    .wtr-table {
       background: white;
-      border-radius: 15px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
       overflow: hidden;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-      border: 1px solid #e5e7eb;
+    }
+
+    .table-header {
+      background: #f8fafc;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .table-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #1e293b;
     }
 
     table {
@@ -318,572 +188,314 @@
       border-collapse: collapse;
     }
 
-    thead {
-      background: linear-gradient(135deg, #0072bc, #004c8c);
-    }
-
-    thead th {
-      color: white;
-      padding: 16px 12px;
+    th,
+    td {
+      padding: 1rem;
       text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    th {
+      background: #f8fafc;
       font-weight: 600;
-      font-size: 0.9rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    tbody tr {
-      transition: all 0.3s ease;
-      border-bottom: 1px solid #f1f5f9;
-    }
-
-    tbody tr:hover {
-      background: #f0f9ff;
-      transform: scale(1.01);
-    }
-
-    tbody td {
-      padding: 14px 12px;
       color: #374151;
       font-size: 0.9rem;
     }
 
-    .status-pending {
-      background: linear-gradient(135deg, #fbbf24, #f59e0b);
-      color: white;
-      padding: 4px 12px;
+    .status-badge {
+      padding: 0.25rem 0.75rem;
       border-radius: 20px;
       font-size: 0.8rem;
-      font-weight: 600;
+      font-weight: 500;
+    }
+
+    .status-pending {
+      background: #fef3c7;
+      color: #92400e;
     }
 
     .status-approved {
-      background: linear-gradient(135deg, #16a34a, #15803d);
-      color: white;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      font-weight: 600;
+      background: #d1fae5;
+      color: #065f46;
     }
 
     .status-rejected {
-      background: linear-gradient(135deg, #dc2626, #b91c1c);
-      color: white;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      font-weight: 600;
+      background: #fee2e2;
+      color: #991b1b;
     }
 
     .action-buttons {
       display: flex;
-      gap: 8px;
+      gap: 0.5rem;
     }
 
-    .employee-details {
-      font-weight: 600;
-      color: #004c8c;
+    .btn-sm {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.8rem;
+      border-radius: 6px;
     }
 
-    .hours-info {
-      font-weight: 500;
-      color: #0072bc;
+    .btn-approve {
+      background: #10b981;
+      color: white;
     }
 
-    table td {
-      box-shadow: inset -1px 0 0 #e5e7eb;
+    .btn-reject {
+      background: #ef4444;
+      color: white;
     }
 
-    table th {
-      border-right: 1px solid #e5e7eb;
-    }
-
-    table td:last-child,
-    table th:last-child {
-      border-right: none;
+    .btn-view {
+      background: #6b7280;
+      color: white;
     }
 
     .loading {
-      display: none;
       text-align: center;
-      padding: 40px;
+      padding: 2rem;
       color: #64748b;
-      font-size: 1.1rem;
     }
 
-    .loading.show {
-      display: block;
-    }
-
-    .no-data {
-      text-align: center;
-      padding: 40px;
-      color: #64748b;
-      font-size: 1.1rem;
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
     }
 
     @media (max-width: 768px) {
-      .user-info {
-        position: static;
-        margin-bottom: 20px;
+      .header-content {
+        flex-direction: column;
+        gap: 1rem;
         text-align: center;
       }
 
-      .controls {
+      .controls-row {
         flex-direction: column;
-        align-items: stretch;
-        flex-wrap: wrap;
       }
 
-      .control-group {
-        border-right: none;
-        margin-right: 0;
-        padding-right: 0;
-        margin-bottom: 10px;
+      .form-group {
+        width: 100%;
       }
 
-      .container {
-        padding: 20px;
+      table {
+        font-size: 0.8rem;
       }
 
-      .header h1 {
-        font-size: 2rem;
+      th,
+      td {
+        padding: 0.5rem;
       }
-
-      .table-container {
-        overflow-x: auto;
-      }
-    }
-
-    /* Clerk overrides */
-    .cl-userButtonAvatarBox {
-      width: 32px !important;
-      height: 32px !important;
     }
   </style>
 </head>
 
 <body>
-  <div class="container">
-    <!-- Auth Loading State -->
-    <div id="authLoading" class="auth-container">
-      <div class="auth-loading">Checking authentication...</div>
-    </div>
-
-    <!-- Sign In Prompt -->
-    <div id="signInPrompt" class="auth-container" style="display: none;">
-      <img src="IECC Logo.png" alt="IECC Logo" style="max-height: 80px; margin-bottom: 30px;">
-      <div class="signin-prompt">
-        <h2>IECC Work Time Records</h2>
-        <p>Please sign in with your Microsoft account to access the dashboard</p>
-        <div id="clerk-signin"></div>
-      </div>
-    </div>
-
-    <!-- Access Denied -->
-    <div id="accessDenied" class="auth-container" style="display: none;">
-      <img src="IECC Logo.png" alt="IECC Logo" style="max-height: 80px; margin-bottom: 30px;">
-      <div class="auth-error">
-        <h3>Access Denied</h3>
-        <p id="accessDeniedMessage">Your account is not authorized to access this system.</p>
-        <div style="margin-top: 20px;">
-          <button id="signOutBtn" onclick="signOut()" style="
-            background: #dc2626;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-          ">Sign Out</button>
+  <header class="header">
+    <div class="header-content">
+      <div class="logo-section">
+        <img src="IECC Logo.png" alt="IECC Logo" class="logo">
+        <div>
+          <div class="title">WTR Manager Dashboard</div>
+          <div style="font-size: 0.9rem; opacity: 0.9;">Work Time Records Management</div>
         </div>
       </div>
-    </div>
-
-    <!-- Main Dashboard Content -->
-    <div id="mainContent" style="display: none;">
-      <div class="header">
+      <div class="user-section">
         <div class="user-info" id="userInfo">
-          <h4>Signed in as:</h4>
-          <p id="userName">Loading...</p>
-          <p id="userEmail">Loading...</p>
-          <div id="clerk-user-button"></div>
+          <div>Loading...</div>
         </div>
-
-        <img src="IECC Logo.png" alt="IECC Logo"
-          style="display: block; margin-left: 0; margin-right: auto; width: auto; height: auto;">
-        <h1>IECC Work Time Records</h1>
-        <p>Approve and manage employee work time submissions</p>
+        <button class="btn btn-outline" onclick="signOut()">Sign Out</button>
       </div>
+    </div>
+  </header>
 
-      <div class="controls">
-        <div class="control-group">
-          <label>Filter by Status</label>
-          <select id="statusFilter">
-            <option value="all">All Status</option>
+  <main class="main-content">
+    <div id="errorContainer"></div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-number" id="totalRecords">-</div>
+        <div class="stat-label">Total WTR Records</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="pendingRecords">-</div>
+        <div class="stat-label">Pending Approval</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="approvedRecords">-</div>
+        <div class="stat-label">Approved</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="rejectedRecords">-</div>
+        <div class="stat-label">Rejected</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="controls-row">
+        <div class="form-group">
+          <label for="departmentFilter">Department</label>
+          <select class="form-control" id="departmentFilter" onchange="filterRecords()">
+            <option value="">All Departments</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="statusFilter">Status</label>
+          <select class="form-control" id="statusFilter" onchange="filterRecords()">
+            <option value="">All Status</option>
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </select>
         </div>
-
-        <div class="control-group">
-          <label>Filter by Department</label>
-          <select id="departmentFilter">
-            <option value="all">All Departments</option>
+        <div class="form-group">
+          <label for="monthFilter">Month</label>
+          <select class="form-control" id="monthFilter" onchange="filterRecords()">
+            <option value="">All Months</option>
           </select>
         </div>
-
-        <div class="control-group">
-          <label>Filter by Month</label>
-          <select id="monthFilter">
-            <option value="all">All Months</option>
-            <option value="1">January</option>
-            <option value="2">February</option>
-            <option value="3">March</option>
-            <option value="4">April</option>
-            <option value="5">May</option>
-            <option value="6">June</option>
-            <option value="7">July</option>
-            <option value="8">August</option>
-            <option value="9">September</option>
-            <option value="10">October</option>
-            <option value="11">November</option>
-            <option value="12">December</option>
-          </select>
-        </div>
-
-        <div class="control-group">
-          <label>Filter by Year</label>
-          <select id="yearFilter">
-            <option value="all">All Years</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-          </select>
-        </div>
-
-        <div class="control-group">
-          <label>Search Employee</label>
-          <input type="text" id="searchEmployee" placeholder="Search by name or email">
-        </div>
-
-        <button class="btn btn-primary" onclick="loadData()">Refresh Data</button>
-      </div>
-
-      <div class="stats" id="statsContainer">
-        <div class="stat-card">
-          <h3 id="totalRecords">0</h3>
-          <p>Total Records</p>
-        </div>
-        <div class="stat-card">
-          <h3 id="pendingRecords">0</h3>
-          <p>Pending Approval</p>
-        </div>
-        <div class="stat-card">
-          <h3 id="approvedRecords">0</h3>
-          <p>Approved</p>
-        </div>
-        <div class="stat-card">
-          <h3 id="rejectedRecords">0</h3>
-          <p>Rejected</p>
-        </div>
-      </div>
-
-      <div class="loading" id="loading">
-        <p>Loading data...</p>
-      </div>
-
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Employee Info</th>
-              <th>Period</th>
-              <th>Hours</th>
-              <th>Activity Details</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="dataTable">
-            <!-- Data will be populated here -->
-          </tbody>
-        </table>
-      </div>
-
-      <div class="no-data" id="noData" style="display: none;">
-        <p>No work time records found. Please check your database connection or add some data.</p>
-      </div>
-
-      <!-- Pagination Controls -->
-      <div class="pagination-container" id="paginationControls" style="display: none;">
-        <div class="pagination-info">
-          <div class="rows-per-page">
-            <label for="rowsPerPage">Rows per page:</label>
-            <select id="rowsPerPage">
-              <option value="10" selected>10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-            </select>
-          </div>
-          <span id="pageInfo">Page 1 of 1</span>
-        </div>
-        <div class="pagination-buttons">
-          <button class="btn btn-secondary" onclick="prevPage()" id="prevBtn">Previous</button>
-          <button class="btn btn-secondary" onclick="nextPage()" id="nextBtn">Next</button>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="loadWTRData()">Refresh</button>
         </div>
       </div>
     </div>
-  </div>
+
+    <div class="wtr-table">
+      <div class="table-header">
+        <div class="table-title">Work Time Records</div>
+      </div>
+      <div id="tableContainer">
+        <div class="loading">Loading WTR data...</div>
+      </div>
+    </div>
+  </main>
 
   <script>
-    // Global variables
+    let clerkInstance = null;
+    let currentUser = null;
     let wtrData = [];
     let filteredData = [];
-    let currentPage = 1;
-    let rowsPerPage = 10;
-    let clerk;
 
-    const CLERK_PUBLISHABLE_KEY = "pk_test_d2VsY29tZS1jb3diaXJkLTk2LmNsZXJrLmFjY291bnRzLmRldiQ";
-
-    // Initialize Clerk when page loads
-    document.addEventListener('DOMContentLoaded', initializeClerk);
-
-    async function initializeClerk() {
+    // Initialize Clerk
+    async function initializeAuth() {
       try {
-        console.log('Loading Clerk...');
+        if (!window.Clerk) {
+          throw new Error('Clerk SDK not loaded');
+        }
 
-        // Dynamically load Clerk script
-        const script = document.createElement('script');
-        script.src = 'https://welcome-cowbird-96.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
-        script.async = true;
+        clerkInstance = window.Clerk;
 
-        script.onload = async () => {
-          try {
-            console.log('Clerk script loaded, initializing...');
-            clerk = new window.Clerk(CLERK_PUBLISHABLE_KEY);
-            await clerk.load();
-            console.log('Clerk loaded successfully');
-            handleAuthState();
-          } catch (error) {
-            console.error('Error initializing Clerk:', error);
-            showError('Failed to initialize authentication system: ' + error.message);
-          }
-        };
+        await clerkInstance.load({
+          publishableKey: 'pk_test_d2VsY29tZS1jb3diaXJkLTk2LmNsZXJrLmFjY291bnRzLmRldiQ'
+        });
 
-        script.onerror = () => {
-          console.error('Failed to load Clerk script');
-          showError('Failed to load authentication system');
-        };
-
-        document.head.appendChild(script);
+        if (clerkInstance.user) {
+          currentUser = clerkInstance.user;
+          await loadUserData();
+          await loadDepartments();
+          await loadWTRData();
+        } else {
+          // Redirect to sign in
+          clerkInstance.redirectToSignIn();
+        }
       } catch (error) {
-        console.error('Error in initializeClerk:', error);
-        showError('Authentication system error: ' + error.message);
+        console.error('Failed to initialize authentication system:', error);
+        showError('Failed to initialize authentication system: ' + error.message);
+
+        // Show retry button
+        document.getElementById('errorContainer').innerHTML += `
+                    <div style="text-align: center; margin-top: 1rem;">
+                        <button class="btn btn-primary" onclick="window.location.reload()">Retry</button>
+                    </div>
+                `;
       }
     }
 
-    function handleAuthState() {
-      const authLoading = document.getElementById('authLoading');
-      const signInPrompt = document.getElementById('signInPrompt');
-      const accessDenied = document.getElementById('accessDenied');
-      const mainContent = document.getElementById('mainContent');
-
-      // Hide all sections
-      authLoading.style.display = 'none';
-      signInPrompt.style.display = 'none';
-      accessDenied.style.display = 'none';
-      mainContent.style.display = 'none';
-
-      if (clerk.user) {
-        console.log('User is signed in:', clerk.user.emailAddresses[0]?.emailAddress);
-        checkAuthorization();
-      } else {
-        console.log('User not signed in, showing sign in prompt');
-        signInPrompt.style.display = 'block';
-
-        // Mount sign in component
-        try {
-          clerk.mountSignIn(document.getElementById('clerk-signin'), {
-            routing: 'hash',
-            signUpUrl: null, // Disable sign up
-            appearance: {
-              elements: {
-                rootBox: 'width: 100%;',
-                card: 'box-shadow: none; border: 1px solid #bae6fd;'
-              }
-            }
-          });
-        } catch (error) {
-          console.error('Error mounting sign in:', error);
-          showError('Failed to load sign in form');
-        }
-      }
-
-      // Listen for auth changes
-      clerk.addListener(({ session, user }) => {
-        console.log('Auth state changed:', { session: !!session, user: !!user });
-        if (user && session) {
-          checkAuthorization();
-        } else if (!user) {
-          handleAuthState();
-        }
-      });
-    }
-
-    async function checkAuthorization() {
+    async function loadUserData() {
       try {
-        console.log('Checking user authorization...');
-        const session = clerk.session;
-
-        if (!session) {
-          throw new Error('No active session');
-        }
-
-        const token = await session.getToken();
         const response = await fetch('/api/user', {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Authorization': `Bearer ${await clerkInstance.session.getToken()}`
           }
         });
 
         if (response.ok) {
           const userData = await response.json();
-          console.log('User authorized:', userData.user);
-
-          // Update user info
-          document.getElementById('userName').textContent = userData.user.name;
-          document.getElementById('userEmail').textContent = userData.user.email;
-
-          // Show main content
-          document.getElementById('mainContent').style.display = 'block';
-
-          // Mount user button
-          try {
-            clerk.mountUserButton(document.getElementById('clerk-user-button'));
-          } catch (error) {
-            console.warn('Failed to mount user button:', error);
-          }
-
-          // Load dashboard data
-          await loadData();
-          await loadDepartments();
-          setupEventListeners();
-
-        } else if (response.status === 403) {
-          const errorData = await response.json();
-          console.log('User not authorized:', errorData);
-
-          document.getElementById('accessDeniedMessage').textContent =
-            errorData.error || 'Your account is not authorized to access this system.';
-          document.getElementById('accessDenied').style.display = 'block';
-
+          document.getElementById('userInfo').innerHTML = `
+                        <div><strong>${userData.user.name}</strong></div>
+                        <div style="opacity: 0.8;">${userData.user.email}</div>
+                    `;
         } else {
-          throw new Error(`Authorization check failed: ${response.status}`);
+          throw new Error('Failed to load user data');
         }
       } catch (error) {
-        console.error('Authorization check failed:', error);
-        showError('Failed to verify authorization: ' + error.message);
-      }
-    }
-
-    // Data loading functions
-    async function loadData() {
-      const loading = document.getElementById('loading');
-      const noData = document.getElementById('noData');
-      const tableBody = document.getElementById('dataTable');
-      const paginationControls = document.getElementById('paginationControls');
-
-      try {
-        loading.classList.add('show');
-        noData.style.display = 'none';
-        paginationControls.style.display = 'none';
-
-        const session = clerk.session;
-        if (!session) {
-          throw new Error('No active session');
-        }
-
-        const response = await fetch('/api/wtr', {
-          headers: {
-            'Authorization': `Bearer ${await session.getToken()}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        wtrData = await response.json();
-        filteredData = [...wtrData];
-        updateStats();
-        applyFilters();
-
-      } catch (error) {
-        console.error('Failed to load data:', error);
-        tableBody.innerHTML = `
-          <tr>
-            <td colspan="6" style="text-align: center; padding: 40px; color: #dc2626;">
-              Error loading data: ${error.message}
-            </td>
-          </tr>
-        `;
-      } finally {
-        loading.classList.remove('show');
+        console.error('Error loading user data:', error);
+        showError('Failed to load user information');
       }
     }
 
     async function loadDepartments() {
       try {
-        const session = clerk.session;
-        if (!session) return;
-
         const response = await fetch('/api/departments', {
           headers: {
-            'Authorization': `Bearer ${await session.getToken()}`,
-            'Content-Type': 'application/json'
+            'Authorization': `Bearer ${await clerkInstance.session.getToken()}`
           }
         });
 
         if (response.ok) {
           const departments = await response.json();
-          const departmentFilter = document.getElementById('departmentFilter');
-
-          // Clear existing options except "All Departments"
-          departmentFilter.innerHTML = '<option value="all">All Departments</option>';
-
+          const select = document.getElementById('departmentFilter');
           departments.forEach(dept => {
             const option = document.createElement('option');
             option.value = dept;
             option.textContent = dept;
-            departmentFilter.appendChild(option);
+            select.appendChild(option);
           });
+        } else {
+          throw new Error('Failed to load departments');
         }
       } catch (error) {
-        console.error('Failed to load departments:', error);
+        console.error('Error loading departments:', error);
       }
     }
 
-    function setupEventListeners() {
-      // Filter event listeners
-      document.getElementById('statusFilter').addEventListener('change', applyFilters);
-      document.getElementById('departmentFilter').addEventListener('change', applyFilters);
-      document.getElementById('monthFilter').addEventListener('change', applyFilters);
-      document.getElementById('yearFilter').addEventListener('change', applyFilters);
-      document.getElementById('searchEmployee').addEventListener('input', applyFilters);
-      document.getElementById('rowsPerPage').addEventListener('change', (e) => {
-        rowsPerPage = parseInt(e.target.value);
-        currentPage = 1;
-        displayPage();
-      });
+    async function loadWTRData() {
+      try {
+        document.getElementById('tableContainer').innerHTML = '<div class="loading">Loading WTR data...</div>';
+
+        const response = await fetch('/api/wtr', {
+          headers: {
+            'Authorization': `Bearer ${await clerkInstance.session.getToken()}`
+          }
+        });
+
+        if (response.ok) {
+          wtrData = await response.json();
+          filteredData = [...wtrData];
+          updateStats();
+          populateMonthFilter();
+          renderTable();
+        } else {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      } catch (error) {
+        console.error('Error loading WTR data:', error);
+        showError('Failed to load WTR data: ' + error.message);
+        document.getElementById('tableContainer').innerHTML = `
+                    <div class="error" style="margin: 1rem;">
+                        Failed to load data. Please check your connection and try again.
+                    </div>
+                `;
+      }
     }
 
     function updateStats() {
       const total = wtrData.length;
-      const pending = wtrData.filter(record => record.status.toLowerCase() === 'pending').length;
-      const approved = wtrData.filter(record => record.status.toLowerCase() === 'approved').length;
-      const rejected = wtrData.filter(record => record.status.toLowerCase() === 'rejected').length;
+      const pending = wtrData.filter(w => w.status === 'pending').length;
+      const approved = wtrData.filter(w => w.status === 'approved').length;
+      const rejected = wtrData.filter(w => w.status === 'rejected').length;
 
       document.getElementById('totalRecords').textContent = total;
       document.getElementById('pendingRecords').textContent = pending;
@@ -891,218 +503,218 @@
       document.getElementById('rejectedRecords').textContent = rejected;
     }
 
-    function applyFilters() {
-      const statusFilter = document.getElementById('statusFilter').value;
-      const departmentFilter = document.getElementById('departmentFilter').value;
-      const monthFilter = document.getElementById('monthFilter').value;
-      const yearFilter = document.getElementById('yearFilter').value;
-      const searchTerm = document.getElementById('searchEmployee').value.toLowerCase();
+    function populateMonthFilter() {
+      const months = [...new Set(wtrData.map(w => `${w.wtr_year}-${w.wtr_month.toString().padStart(2, '0')}`))];
+      months.sort().reverse();
 
-      filteredData = wtrData.filter(record => {
-        const statusMatch = statusFilter === 'all' || record.status.toLowerCase() === statusFilter;
-        const departmentMatch = departmentFilter === 'all' || record.department === departmentFilter;
-        const monthMatch = monthFilter === 'all' || record.wtr_month.toString() === monthFilter;
-        const yearMatch = yearFilter === 'all' || record.wtr_year.toString() === yearFilter;
-        const searchMatch = searchTerm === '' ||
-          record.employee_name.toLowerCase().includes(searchTerm) ||
-          record.employee_email.toLowerCase().includes(searchTerm);
+      const select = document.getElementById('monthFilter');
+      // Clear existing options except first
+      select.innerHTML = '<option value="">All Months</option>';
 
-        return statusMatch && departmentMatch && monthMatch && yearMatch && searchMatch;
+      months.forEach(month => {
+        const option = document.createElement('option');
+        option.value = month;
+        option.textContent = new Date(month + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        select.appendChild(option);
       });
-
-      currentPage = 1;
-      displayPage();
     }
 
-    function displayPage() {
-      const tableBody = document.getElementById('dataTable');
-      const noData = document.getElementById('noData');
-      const paginationControls = document.getElementById('paginationControls');
+    function filterRecords() {
+      const deptFilter = document.getElementById('departmentFilter').value;
+      const statusFilter = document.getElementById('statusFilter').value;
+      const monthFilter = document.getElementById('monthFilter').value;
+
+      filteredData = wtrData.filter(record => {
+        const deptMatch = !deptFilter || record.department === deptFilter;
+        const statusMatch = !statusFilter || record.status === statusFilter;
+        const monthMatch = !monthFilter || `${record.wtr_year}-${record.wtr_month.toString().padStart(2, '0')}` === monthFilter;
+
+        return deptMatch && statusMatch && monthMatch;
+      });
+
+      renderTable();
+    }
+
+    function renderTable() {
+      const container = document.getElementById('tableContainer');
 
       if (filteredData.length === 0) {
-        tableBody.innerHTML = '';
-        noData.style.display = 'block';
-        paginationControls.style.display = 'none';
+        container.innerHTML = '<div class="loading">No records found matching the current filters.</div>';
         return;
       }
 
-      noData.style.display = 'none';
+      const tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Department</th>
+                            <th>Period</th>
+                            <th>Hours</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filteredData.map(record => `
+                            <tr>
+                                <td>
+                                    <div><strong>${record.employee_name}</strong></div>
+                                    <div style="font-size: 0.8rem; color: #64748b;">${record.employee_email}</div>
+                                </td>
+                                <td>${record.department || 'N/A'}</td>
+                                <td>${new Date(record.wtr_year, record.wtr_month - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}</td>
+                                <td>
+                                    <div>${record.total_submitted_hours}h submitted</div>
+                                    <div style="font-size: 0.8rem; color: #64748b;">${record.expected_hours}h expected</div>
+                                </td>
+                                <td><span class="status-badge status-${record.status}">${record.status.charAt(0).toUpperCase() + record.status.slice(1)}</span></td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button class="btn btn-sm btn-view" onclick="viewDetails(${record.wtr_id})">View</button>
+                                        ${record.status === 'pending' ? `
+                                            <button class="btn btn-sm btn-approve" onclick="updateStatus(${record.wtr_id}, 'approved')">Approve</button>
+                                            <button class="btn btn-sm btn-reject" onclick="updateStatus(${record.wtr_id}, 'rejected')">Reject</button>
+                                        ` : ''}
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
 
-      const startIndex = (currentPage - 1) * rowsPerPage;
-      const endIndex = startIndex + rowsPerPage;
-      const pageData = filteredData.slice(startIndex, endIndex);
-
-      tableBody.innerHTML = pageData.map(record => {
-        const activitiesHtml = record.activities.map(activity => `
-          <div style="margin-bottom: 8px; padding: 6px; background: #f8fafc; border-radius: 4px; border-left: 3px solid #0072bc;">
-            <strong>${activity.activity_name || 'N/A'}</strong>
-            <br><span style="font-size: 0.8rem; color: #64748b;">${activity.project_name || 'No Project'} • ${activity.hours_submitted}h</span>
-            ${activity.tech_report_description ? `<br><em style="font-size: 0.75rem; color: #64748b;">${activity.tech_report_description}</em>` : ''}
-          </div>
-        `).join('');
-
-        return `
-          <tr>
-            <td>
-              <div class="employee-details">${record.employee_name}</div>
-              <div style="font-size: 0.8rem; color: #64748b;">${record.employee_email}</div>
-              <div style="font-size: 0.8rem; color: #64748b;">${record.department || 'N/A'}</div>
-            </td>
-            <td>
-              <div class="hours-info">${getMonthName(record.wtr_month)} ${record.wtr_year}</div>
-            </td>
-            <td>
-              <div class="hours-info">${record.total_submitted_hours}h</div>
-              <div style="font-size: 0.8rem; color: #64748b;">Expected: ${record.expected_hours}h</div>
-            </td>
-            <td style="max-width: 300px;">
-              ${activitiesHtml || '<em style="color: #64748b;">No activities recorded</em>'}
-            </td>
-            <td>
-              <span class="status-${record.status.toLowerCase()}">${record.status}</span>
-            </td>
-            <td>
-              <div class="action-buttons">
-                ${record.status.toLowerCase() !== 'approved' ?
-            `<button class="btn btn-success" onclick="updateStatus(${record.wtr_id}, 'approved')">Approve</button>` : ''}
-                ${record.status.toLowerCase() !== 'rejected' ?
-            `<button class="btn btn-danger" onclick="updateStatus(${record.wtr_id}, 'rejected')">Reject</button>` : ''}
-                ${record.status.toLowerCase() !== 'pending' ?
-            `<button class="btn btn-secondary" onclick="updateStatus(${record.wtr_id}, 'pending')">Reset</button>` : ''}
-              </div>
-            </td>
-          </tr>
-        `;
-      }).join('');
-
-      // Update pagination
-      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
-      document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
-      document.getElementById('prevBtn').disabled = currentPage === 1;
-      document.getElementById('nextBtn').disabled = currentPage === totalPages;
-
-      if (totalPages > 1) {
-        paginationControls.style.display = 'flex';
-      } else {
-        paginationControls.style.display = 'none';
-      }
-    }
-
-    function getMonthName(monthNumber) {
-      const months = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-      ];
-      return months[monthNumber - 1] || 'Unknown';
+      container.innerHTML = tableHTML;
     }
 
     async function updateStatus(wtrId, newStatus) {
-      try {
-        const session = clerk.session;
-        if (!session) {
-          throw new Error('No active session');
-        }
+      if (!confirm(`Are you sure you want to ${newStatus === 'approved' ? 'approve' : 'reject'} this WTR?`)) {
+        return;
+      }
 
+      try {
         const response = await fetch(`/api/wtr/${wtrId}/status`, {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${await session.getToken()}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await clerkInstance.session.getToken()}`
           },
           body: JSON.stringify({ status: newStatus })
         });
 
-        if (!response.ok) {
-          throw new Error(`Failed to update status: ${response.status}`);
+        if (response.ok) {
+          await loadWTRData(); // Refresh data
+          showSuccess(`WTR ${newStatus === 'approved' ? 'approved' : 'rejected'} successfully!`);
+        } else {
+          throw new Error(`Failed to update status: ${response.statusText}`);
         }
-
-        // Update local data
-        const recordIndex = wtrData.findIndex(record => record.wtr_id === wtrId);
-        if (recordIndex !== -1) {
-          wtrData[recordIndex].status = newStatus;
-          updateStats();
-          applyFilters();
-        }
-
-        // Show success message
-        showNotification(`Status updated to ${newStatus} successfully!`, 'success');
-
       } catch (error) {
-        console.error('Failed to update status:', error);
-        showNotification(`Failed to update status: ${error.message}`, 'error');
+        console.error('Error updating status:', error);
+        showError('Failed to update status: ' + error.message);
       }
     }
 
-    function showNotification(message, type) {
-      // Create notification element
-      const notification = document.createElement('div');
-      notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 20px;
-        border-radius: 8px;
-        color: white;
-        font-weight: 600;
-        z-index: 1000;
-        opacity: 0;
-        transition: opacity 0.3s ease;
-        ${type === 'success' ? 'background: #16a34a;' : 'background: #dc2626;'}
-      `;
-      notification.textContent = message;
+    function viewDetails(wtrId) {
+      const record = wtrData.find(w => w.wtr_id === wtrId);
+      if (!record) return;
 
-      document.body.appendChild(notification);
+      let activitiesHTML = '';
+      if (record.activities && record.activities.length > 0) {
+        activitiesHTML = `
+                    <h4>Activities:</h4>
+                    <table style="width: 100%; margin-top: 10px; font-size: 0.9rem;">
+                        <thead>
+                            <tr style="background: #f8fafc;">
+                                <th style="padding: 8px;">Activity</th>
+                                <th style="padding: 8px;">Hours</th>
+                                <th style="padding: 8px;">Project</th>
+                                <th style="padding: 8px;">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${record.activities.map(activity => `
+                                <tr>
+                                    <td style="padding: 8px;">${activity.activity_name || 'N/A'}</td>
+                                    <td style="padding: 8px;">${activity.hours_submitted}h</td>
+                                    <td style="padding: 8px;">${activity.project_name || 'N/A'}</td>
+                                    <td style="padding: 8px;">${activity.tech_report_description || 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+      }
 
-      // Fade in
-      setTimeout(() => notification.style.opacity = '1', 10);
+      const content = `
+                <div style="max-width: 800px;">
+                    <h3>WTR Details - ${record.employee_name}</h3>
+                    <div style="margin: 15px 0;">
+                        <strong>Period:</strong> ${new Date(record.wtr_year, record.wtr_month - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}<br>
+                        <strong>Department:</strong> ${record.department || 'N/A'}<br>
+                        <strong>Total Hours:</strong> ${record.total_submitted_hours}h (Expected: ${record.expected_hours}h)<br>
+                        <strong>Status:</strong> <span class="status-badge status-${record.status}">${record.status.charAt(0).toUpperCase() + record.status.slice(1)}</span>
+                    </div>
+                    ${activitiesHTML}
+                </div>
+            `;
 
-      // Remove after 3 seconds
-      setTimeout(() => {
-        notification.style.opacity = '0';
-        setTimeout(() => document.body.removeChild(notification), 300);
-      }, 3000);
+      showModal('WTR Details', content);
     }
 
-    function prevPage() {
-      if (currentPage > 1) {
-        currentPage--;
-        displayPage();
-      }
-    }
+    function showModal(title, content) {
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.5); z-index: 1000; display: flex;
+                align-items: center; justify-content: center; padding: 20px;
+            `;
 
-    function nextPage() {
-      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
-      if (currentPage < totalPages) {
-        currentPage++;
-        displayPage();
-      }
-    }
+      modal.innerHTML = `
+                <div style="background: white; border-radius: 12px; padding: 20px; max-width: 90%; max-height: 90%; overflow-y: auto;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 style="margin: 0; color: #1e293b;">${title}</h2>
+                        <button onclick="this.closest('div').parentElement.remove()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">×</button>
+                    </div>
+                    ${content}
+                </div>
+            `;
 
-    function signOut() {
-      if (clerk) {
-        clerk.signOut(() => {
-          window.location.reload();
-        });
-      }
+      document.body.appendChild(modal);
+
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+      });
     }
 
     function showError(message) {
-      document.getElementById('authLoading').innerHTML = `
-        <div style="color: #dc2626; font-size: 1.1rem; margin-bottom: 20px;">
-          Error: ${message}
-        </div>
-        <button onclick="window.location.reload()" style="
-          background: #0072bc;
-          color: white;
-          border: none;
-          padding: 12px 24px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 1rem;
-        ">Retry</button>
-      `;
-      document.getElementById('authLoading').style.display = 'block';
+      document.getElementById('errorContainer').innerHTML = `
+                <div class="error">${message}</div>
+            `;
     }
+
+    function showSuccess(message) {
+      const successDiv = document.createElement('div');
+      successDiv.style.cssText = `
+                background: #d1fae5; color: #065f46; padding: 1rem;
+                border-radius: 8px; margin-bottom: 1rem; border: 1px solid #10b981;
+            `;
+      successDiv.textContent = message;
+      document.getElementById('errorContainer').innerHTML = '';
+      document.getElementById('errorContainer').appendChild(successDiv);
+
+      setTimeout(() => successDiv.remove(), 5000);
+    }
+
+    function signOut() {
+      if (clerkInstance) {
+        clerkInstance.signOut();
+      } else {
+        window.location.reload();
+      }
+    }
+
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', initializeAuth);
   </script>
 </body>
 
