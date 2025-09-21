@@ -630,13 +630,13 @@
   </div>
 
   <!-- Clerk JavaScript -->
-  <script
-      async
-      crossorigin="anonymous"
-      data-clerk-publishable-key="pk_test_d2VsY29tZS1jb3diaXJkLTk2LmNsZXJrLmFjY291bnRzLmRldiQ"
-      src="https://welcome-cowbird-96.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
-      type="text/javascript">
-  </script>
+  <script async crossorigin="anonymous"
+    data-clerk-publishable-key="pk_test_d2VsY29tZS1jb3diaXJkLTk2LmNsZXJrLmFjY291bnRzLmRldiQ"
+    src="https://welcome-cowbird-96.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+    type="text/javascript">
+    </script>
+
+  <script>
     let wtrData = [];
     let filteredData = [];
     let currentPage = 1;
@@ -678,3 +678,335 @@
         // Not signed in
         signInPrompt.style.display = 'block';
         return;
+      }
+
+      // User is signed in, check authorization with backend
+      try {
+        const response = await fetch('/api/user', {
+          headers: {
+            'Authorization': `Bearer ${await session.getToken()}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          // User is authorized
+          document.getElementById('userName').textContent = userData.user.name;
+          document.getElementById('userEmail').textContent = userData.user.email;
+          mainContent.style.display = 'block';
+
+          // Load initial data
+          await loadData();
+          await loadDepartments();
+          setupEventListeners();
+        } else if (response.status === 403) {
+          // User is not authorized
+          const errorData = await response.json();
+          document.getElementById('accessDeniedMessage').textContent =
+            errorData.error || 'Your account is not authorized to access this system.';
+          accessDenied.style.display = 'block';
+        } else {
+          throw new Error('Failed to verify user authorization');
+        }
+      } catch (error) {
+        console.error('Authorization check failed:', error);
+        // Show generic access denied
+        accessDenied.style.display = 'block';
+      }
+    }
+
+    // Data loading functions
+    async function loadData() {
+      const loading = document.getElementById('loading');
+      const noData = document.getElementById('noData');
+      const tableBody = document.getElementById('dataTable');
+      const paginationControls = document.getElementById('paginationControls');
+
+      try {
+        loading.classList.add('show');
+        noData.style.display = 'none';
+        paginationControls.style.display = 'none';
+
+        const session = clerk.session;
+        if (!session) {
+          throw new Error('No active session');
+        }
+
+        const response = await fetch('/api/wtr', {
+          headers: {
+            'Authorization': `Bearer ${await session.getToken()}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        wtrData = await response.json();
+        filteredData = [...wtrData];
+        updateStats();
+        applyFilters();
+
+      } catch (error) {
+        console.error('Failed to load data:', error);
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 40px; color: #dc2626;">
+              Error loading data: ${error.message}
+            </td>
+          </tr>
+        `;
+      } finally {
+        loading.classList.remove('show');
+      }
+    }
+
+    async function loadDepartments() {
+      try {
+        const session = clerk.session;
+        if (!session) return;
+
+        const response = await fetch('/api/departments', {
+          headers: {
+            'Authorization': `Bearer ${await session.getToken()}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const departments = await response.json();
+          const departmentFilter = document.getElementById('departmentFilter');
+
+          // Clear existing options except "All Departments"
+          departmentFilter.innerHTML = '<option value="all">All Departments</option>';
+
+          departments.forEach(dept => {
+            const option = document.createElement('option');
+            option.value = dept;
+            option.textContent = dept;
+            departmentFilter.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load departments:', error);
+      }
+    }
+
+    function setupEventListeners() {
+      // Filter event listeners
+      document.getElementById('statusFilter').addEventListener('change', applyFilters);
+      document.getElementById('departmentFilter').addEventListener('change', applyFilters);
+      document.getElementById('monthFilter').addEventListener('change', applyFilters);
+      document.getElementById('yearFilter').addEventListener('change', applyFilters);
+      document.getElementById('searchEmployee').addEventListener('input', applyFilters);
+      document.getElementById('rowsPerPage').addEventListener('change', (e) => {
+        rowsPerPage = parseInt(e.target.value);
+        currentPage = 1;
+        displayPage();
+      });
+    }
+
+    function updateStats() {
+      const total = wtrData.length;
+      const pending = wtrData.filter(record => record.status.toLowerCase() === 'pending').length;
+      const approved = wtrData.filter(record => record.status.toLowerCase() === 'approved').length;
+      const rejected = wtrData.filter(record => record.status.toLowerCase() === 'rejected').length;
+
+      document.getElementById('totalRecords').textContent = total;
+      document.getElementById('pendingRecords').textContent = pending;
+      document.getElementById('approvedRecords').textContent = approved;
+      document.getElementById('rejectedRecords').textContent = rejected;
+    }
+
+    function applyFilters() {
+      const statusFilter = document.getElementById('statusFilter').value;
+      const departmentFilter = document.getElementById('departmentFilter').value;
+      const monthFilter = document.getElementById('monthFilter').value;
+      const yearFilter = document.getElementById('yearFilter').value;
+      const searchTerm = document.getElementById('searchEmployee').value.toLowerCase();
+
+      filteredData = wtrData.filter(record => {
+        const statusMatch = statusFilter === 'all' || record.status.toLowerCase() === statusFilter;
+        const departmentMatch = departmentFilter === 'all' || record.department === departmentFilter;
+        const monthMatch = monthFilter === 'all' || record.wtr_month.toString() === monthFilter;
+        const yearMatch = yearFilter === 'all' || record.wtr_year.toString() === yearFilter;
+        const searchMatch = searchTerm === '' ||
+          record.employee_name.toLowerCase().includes(searchTerm) ||
+          record.employee_email.toLowerCase().includes(searchTerm);
+
+        return statusMatch && departmentMatch && monthMatch && yearMatch && searchMatch;
+      });
+
+      currentPage = 1;
+      displayPage();
+    }
+
+    function displayPage() {
+      const tableBody = document.getElementById('dataTable');
+      const noData = document.getElementById('noData');
+      const paginationControls = document.getElementById('paginationControls');
+
+      if (filteredData.length === 0) {
+        tableBody.innerHTML = '';
+        noData.style.display = 'block';
+        paginationControls.style.display = 'none';
+        return;
+      }
+
+      noData.style.display = 'none';
+
+      const startIndex = (currentPage - 1) * rowsPerPage;
+      const endIndex = startIndex + rowsPerPage;
+      const pageData = filteredData.slice(startIndex, endIndex);
+
+      tableBody.innerHTML = pageData.map(record => {
+        const activitiesHtml = record.activities.map(activity => `
+          <div style="margin-bottom: 8px; padding: 6px; background: #f8fafc; border-radius: 4px; border-left: 3px solid #0072bc;">
+            <strong>${activity.activity_name || 'N/A'}</strong>
+            <br><span style="font-size: 0.8rem; color: #64748b;">${activity.project_name || 'No Project'} • ${activity.hours_submitted}h</span>
+            ${activity.tech_report_description ? `<br><em style="font-size: 0.75rem; color: #64748b;">${activity.tech_report_description}</em>` : ''}
+          </div>
+        `).join('');
+
+        return `
+          <tr>
+            <td>
+              <div class="employee-details">${record.employee_name}</div>
+              <div style="font-size: 0.8rem; color: #64748b;">${record.employee_email}</div>
+              <div style="font-size: 0.8rem; color: #64748b;">${record.department || 'N/A'}</div>
+            </td>
+            <td>
+              <div class="hours-info">${getMonthName(record.wtr_month)} ${record.wtr_year}</div>
+            </td>
+            <td>
+              <div class="hours-info">${record.total_submitted_hours}h</div>
+              <div style="font-size: 0.8rem; color: #64748b;">Expected: ${record.expected_hours}h</div>
+            </td>
+            <td style="max-width: 300px;">
+              ${activitiesHtml || '<em style="color: #64748b;">No activities recorded</em>'}
+            </td>
+            <td>
+              <span class="status-${record.status.toLowerCase()}">${record.status}</span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                ${record.status.toLowerCase() !== 'approved' ?
+            `<button class="btn btn-success" onclick="updateStatus(${record.wtr_id}, 'approved')">Approve</button>` : ''}
+                ${record.status.toLowerCase() !== 'rejected' ?
+            `<button class="btn btn-danger" onclick="updateStatus(${record.wtr_id}, 'rejected')">Reject</button>` : ''}
+                ${record.status.toLowerCase() !== 'pending' ?
+            `<button class="btn btn-secondary" onclick="updateStatus(${record.wtr_id}, 'pending')">Reset</button>` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Update pagination
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+      document.getElementById('prevBtn').disabled = currentPage === 1;
+      document.getElementById('nextBtn').disabled = currentPage === totalPages;
+
+      if (totalPages > 1) {
+        paginationControls.style.display = 'flex';
+      } else {
+        paginationControls.style.display = 'none';
+      }
+    }
+
+    function getMonthName(monthNumber) {
+      const months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      return months[monthNumber - 1] || 'Unknown';
+    }
+
+    async function updateStatus(wtrId, newStatus) {
+      try {
+        const session = clerk.session;
+        if (!session) {
+          throw new Error('No active session');
+        }
+
+        const response = await fetch(`/api/wtr/${wtrId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${await session.getToken()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: newStatus })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update status: ${response.status}`);
+        }
+
+        // Update local data
+        const recordIndex = wtrData.findIndex(record => record.wtr_id === wtrId);
+        if (recordIndex !== -1) {
+          wtrData[recordIndex].status = newStatus;
+          updateStats();
+          applyFilters();
+        }
+
+        // Show success message
+        showNotification(`Status updated to ${newStatus} successfully!`, 'success');
+
+      } catch (error) {
+        console.error('Failed to update status:', error);
+        showNotification(`Failed to update status: ${error.message}`, 'error');
+      }
+    }
+
+    function showNotification(message, type) {
+      // Create notification element
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 1000;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        ${type === 'success' ? 'background: #16a34a;' : 'background: #dc2626;'}
+      `;
+      notification.textContent = message;
+
+      document.body.appendChild(notification);
+
+      // Fade in
+      setTimeout(() => notification.style.opacity = '1', 10);
+
+      // Remove after 3 seconds
+      setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(notification), 300);
+      }, 3000);
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        displayPage();
+      }
+    }
+
+    function nextPage() {
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        displayPage();
+      }
+    }
+  </script>
+</body>
+
+</html>

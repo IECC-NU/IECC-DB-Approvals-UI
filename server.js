@@ -10,20 +10,20 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' ? 
-        'https://your-railway-domain.railway.app' : 
+        process.env.FRONTEND_URL || 'https://your-app-name.up.railway.app' : 
         'http://localhost:3000',
     credentials: true
 }));
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // PostgreSQL configuration
 const pool = new Pool({
-    host: process.env.DB_HOST || 'interchange.proxy.rlwy.net',
-    port: process.env.DB_PORT || 30828,
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'vCSNGeBZiJVIwCRduwnMmqlhWxblqNhU',
-    database: process.env.DB_NAME || 'railway',
+    host: process.env.PGHOST || process.env.DB_HOST,
+    port: process.env.PGPORT || process.env.DB_PORT,
+    user: process.env.PGUSER || process.env.DB_USER,
+    password: process.env.PGPASSWORD || process.env.DB_PASSWORD,
+    database: process.env.PGDATABASE || process.env.DB_NAME,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
@@ -111,6 +111,7 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
 
         const wtrRows = wtrResult.rows;
 
+        // Get activities for each WTR record
         for (let wtr of wtrRows) {
             const activityResult = await client.query(`
                 SELECT 
@@ -174,6 +175,7 @@ app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
         const result = await client.query(`
             SELECT DISTINCT department_name 
             FROM department 
+            WHERE department_name IS NOT NULL
             ORDER BY department_name
         `);
         client.release();
@@ -184,7 +186,7 @@ app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
     }
 });
 
-// Test API endpoint
+// Test API endpoint (public for debugging)
 app.get('/api/test', async (req, res) => {
     try {
         const client = await pool.connect();
@@ -193,7 +195,8 @@ app.get('/api/test', async (req, res) => {
         
         res.json({
             message: 'Database connection successful',
-            data: result.rows[0]
+            data: result.rows[0],
+            env: process.env.NODE_ENV || 'development'
         });
     } catch (error) {
         console.error('Database error:', error);
@@ -203,7 +206,7 @@ app.get('/api/test', async (req, res) => {
 
 // Route handlers
 
-// Root route - serve the login/dashboard page
+// Root route - serve the main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -213,11 +216,17 @@ app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Health check for Railway
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 // Start server
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log('PostgreSQL connection configured');
-    console.log('Clerk authentication configured');
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log('🔐 Clerk authentication configured');
+    console.log('🗃️ PostgreSQL connection configured');
 });
 
 // Test database connection on startup
@@ -230,7 +239,17 @@ async function testConnection() {
         client.release();
     } catch (error) {
         console.error('❌ Database connection failed:', error.message);
+        console.error('🔍 Check your database environment variables');
     }
 }
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('🛑 SIGTERM received, shutting down gracefully');
+    pool.end(() => {
+        console.log('🗃️ Database pool closed');
+        process.exit(0);
+    });
+});
 
 testConnection();
