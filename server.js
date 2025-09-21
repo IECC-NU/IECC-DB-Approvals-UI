@@ -195,46 +195,36 @@
 //   console.log(`🌐 FRONTEND_URL: ${process.env.FRONTEND_URL || '(not set)'}`);
 // });
 
-
-
+// server.js
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-// ✅ Use requireAuth (works across Clerk versions)
 const { requireAuth } = require('@clerk/express');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* ------------------------- CORS (Railway) ------------------------- */
-const allowedOrigins = [process.env.FRONTEND_URL].filter(Boolean);
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    try {
-      const host = new URL(origin).host;
-      const railwayOK = /\.up\.railway\.app$/.test(host);
-      if (railwayOK) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error('Not allowed by CORS: ' + origin));
-    } catch {
-      return cb(new Error('Invalid Origin'));
-    }
-  },
-  credentials: true
-}));
+/* ------------------------- CORS (safe & simple) ------------------------- */
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 /* ---------------------------- PostgreSQL ---------------------------- */
+/* IMPORTANT: use Railway-provided env vars ONLY so we don't point at the wrong DB */
+const must = (name) => {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing required env var: ${name}`);
+  return v;
+};
+
 const pool = new Pool({
-  host: process.env.PGHOST || 'interchange.proxy.rlwy.net',
-  port: Number(process.env.PGPORT || 30828),
-  user: process.env.PGUSER || 'postgres',
-  password: process.env.PGPASSWORD || 'vCSNGeBZiJVIwCRduwnMmqlhWxblqNhU',
-  database: process.env.PGDATABASE || 'railway',
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  host: must('PGHOST'),
+  port: Number(process.env.PGPORT || 5432),
+  user: must('PGUSER'),
+  password: must('PGPASSWORD'),
+  database: must('PGDATABASE'),
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 /* ------------------------- Auth utilities ------------------------- */
@@ -248,9 +238,8 @@ function getEmailFromClaims(claims = {}) {
   );
 }
 
-/* require Clerk session + allowlist check in your DB's `authentication` table */
+/* Clerk session + allow-list check in your `authentication` table */
 function requireAuthWithDbCheck(req, res, next) {
-  // First ensure a valid Clerk session
   return requireAuth()(req, res, async () => {
     try {
       const email =
@@ -274,14 +263,14 @@ function requireAuthWithDbCheck(req, res, next) {
       if (rows.length === 0) {
         return res.status(403).json({
           error: 'Access denied. Your email is not authorized for this system.',
-          email: userEmail
+          email: userEmail,
         });
       }
 
       req.user = {
         email: rows[0].employee_email,
         name: rows[0].employee_name,
-        nuid: rows[0].employee_nuid
+        nuid: rows[0].employee_nuid,
       };
       next();
     } catch (err) {
@@ -293,12 +282,46 @@ function requireAuthWithDbCheck(req, res, next) {
 
 /* ----------------------------- API ----------------------------- */
 
+// Health/debug endpoint to verify DB connection & counts from the browser.
+app.get('/api/debug/dbinfo', async (_req, res) => {
+  const client = await pool.connect();
+  try {
+    const [{ rows: v }] = await Promise.all([
+      client.query(`select version(), current_database() as db, current_user as db_user`),
+    ]);
+    const [{ rows: wtrCount }] = await Promise.all([
+      client.query(`select count(*)::int as count from work_time_records`),
+    ]);
+    const [{ rows: authCount }] = await Promise.all([
+      client.query(`select count(*)::int as count from authentication`),
+    ]);
+
+    res.json({
+      pg: {
+        host: process.env.PGHOST,
+        database: v[0].db,
+        user: v[0].db_user,
+        version: v[0].version,
+      },
+      counts: {
+        work_time_records: wtrCount[0].count,
+        authentication: authCount[0].count,
+      },
+    });
+  } catch (e) {
+    console.error('DBINFO error:', e);
+    res.status(500).json({ error: 'DBINFO failed' });
+  } finally {
+    client.release();
+  }
+});
+
 // Current user (UI header chip)
 app.get('/api/user', requireAuthWithDbCheck, (req, res) => {
   res.json({ authenticated: true, user: req.user });
 });
 
-// Departments (department table)
+// Departments
 app.get('/api/departments', requireAuthWithDbCheck, async (_req, res) => {
   const client = await pool.connect();
   try {
@@ -316,29 +339,50 @@ app.get('/api/departments', requireAuthWithDbCheck, async (_req, res) => {
   }
 });
 
-// WTR list (work_time_records + employee + department + aggregated activities)
-// WTR list
+// WTR list (with activities aggregation matching your schema)
 app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(`
-      SELECT 
-        wtr.wtr_id, 
-        wtr.wtr_month, 
-        wtr.wtr_year, 
-        wtr.approval_status AS status,
-        wtr.total_submitted_hours, 
-        wtr.expected_hours,
-        e.employee_nuid, 
-        e.employee_name, 
-        e.employee_email, 
+      SELECT
+        w.wtr_id,
+        w.wtr_month,
+        w.wtr_year,
+        w.total_submitted_hours,
+        w.expected_hours,
+        w.approval_status AS status,
+
+        e.employee_nuid,
+        e.employee_name,
+        e.employee_email,
         e.employee_title,
-        d.department_name
-      FROM work_time_records wtr
-      JOIN employee e ON wtr.employee_nuid = e.employee_nuid
-      LEFT JOIN department d ON e.department_id = d.department_id
-      ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
+        d.department_name,
+
+        COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object(
+              'coda_log_id', dsl.coda_log_id,
+              'project_name', p.deal_name,
+              'service_line', a.service_line,
+              'activity_name', a.activity_name,
+              'hours_submitted', dsl.hours_submitted,
+              'tech_report_description', dsl.tech_report_description
+            )
+          ) FILTER (WHERE dsl.log_id IS NOT NULL),
+          '[]'
+        ) AS activities
+      FROM work_time_records w
+      JOIN employee e ON e.employee_nuid = w.employee_nuid
+      LEFT JOIN department d ON d.department_id = e.department_id
+      LEFT JOIN details_submission_logs dsl ON dsl.coda_wtr_id = w.coda_wtr_id
+      LEFT JOIN activity a ON a.activity_id = dsl.activity_id
+      LEFT JOIN projects p ON p.project_id = dsl.project_id
+      GROUP BY
+        w.wtr_id, w.wtr_month, w.wtr_year, w.total_submitted_hours, w.expected_hours, w.approval_status,
+        e.employee_nuid, e.employee_name, e.employee_email, e.employee_title, d.department_name
+      ORDER BY w.wtr_year DESC, w.wtr_month DESC, e.employee_name
     `);
+
     res.json(rows);
   } catch (e) {
     console.error('WTR error:', e);
@@ -347,7 +391,6 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
     client.release();
   }
 });
-
 
 // Update WTR status (maps to approval_status)
 app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
@@ -384,9 +427,8 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
 });
 
 /* ------------------------ HTML / Static ------------------------ */
-// Inject ${CLERK_PUBLISHABLE_KEY} into HTML pages
 function serveHtml(fileName) {
-  return (req, res) => {
+  return (_req, res) => {
     const p1 = path.join(__dirname, 'public', fileName);
     const p2 = path.join(__dirname, fileName);
     const filePath = fs.existsSync(p1) ? p1 : p2;
@@ -399,7 +441,7 @@ function serveHtml(fileName) {
   };
 }
 
-// Keep your flow
+// Flow unchanged
 app.get('/', serveHtml('Sign in.html'));
 app.get('/sign-in', serveHtml('Sign in.html'));
 app.get('/dashboard', serveHtml('index.html'));
@@ -407,8 +449,19 @@ app.get('/dashboard', serveHtml('index.html'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* --------------------------- Start --------------------------- */
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🔑 Clerk publishable key present: ${!!process.env.CLERK_PUBLISHABLE_KEY}`);
-  console.log(`🌐 FRONTEND_URL: ${process.env.FRONTEND_URL || '(not set)'}`);
+
+  // DB self-check on boot
+  try {
+    const client = await pool.connect();
+    const { rows: wtr } = await client.query('select count(*)::int as c from work_time_records');
+    const { rows: auth } = await client.query('select count(*)::int as c from authentication');
+    console.log(`🗄️  Connected to PG host=${process.env.PGHOST} db=${process.env.PGDATABASE} user=${process.env.PGUSER}`);
+    console.log(`📊 Rows: work_time_records=${wtr[0].c} | authentication=${auth[0].c}`);
+    client.release();
+  } catch (e) {
+    console.error('❌ DB self-check failed:', e);
+  }
 });
