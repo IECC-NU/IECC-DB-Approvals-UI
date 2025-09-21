@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IECC WTR Manager Dashboard</title>
 
-  <!-- Clerk CSS -->
   <style>
     * {
       margin: 0;
@@ -121,7 +120,7 @@
       line-height: 1.5;
     }
 
-    /* Rest of existing styles */
+    /* Controls */
     .controls {
       display: flex;
       gap: 20px;
@@ -476,7 +475,7 @@
       <img src="IECC Logo.png" alt="IECC Logo" style="max-height: 80px; margin-bottom: 30px;">
       <div class="signin-prompt">
         <h2>IECC Work Time Records</h2>
-        <p>Please sign in with your authorized account to access the dashboard</p>
+        <p>Please sign in with your Microsoft account to access the dashboard</p>
         <div id="clerk-signin"></div>
       </div>
     </div>
@@ -488,7 +487,14 @@
         <h3>Access Denied</h3>
         <p id="accessDeniedMessage">Your account is not authorized to access this system.</p>
         <div style="margin-top: 20px;">
-          <div id="clerk-signout-denied"></div>
+          <button id="signOutBtn" onclick="signOut()" style="
+            background: #dc2626;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+          ">Sign Out</button>
         </div>
       </div>
     </div>
@@ -629,90 +635,155 @@
     </div>
   </div>
 
-  <!-- Clerk JavaScript -->
-  <script async crossorigin="anonymous"
-    data-clerk-publishable-key="pk_test_d2VsY29tZS1jb3diaXJkLTk2LmNsZXJrLmFjY291bnRzLmRldiQ"
-    src="https://welcome-cowbird-96.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
-    type="text/javascript">
-    </script>
-
   <script>
+    // Global variables
     let wtrData = [];
     let filteredData = [];
     let currentPage = 1;
     let rowsPerPage = 10;
     let clerk;
 
-    // Initialize Clerk
-    window.addEventListener("load", async function () {
-      await Clerk.load();
-      clerk = window.Clerk;
+    const CLERK_PUBLISHABLE_KEY = "pk_test_d2VsY29tZS1jb3diaXJkLTk2LmNsZXJrLmFjY291bnRzLmRldiQ";
 
-      // Mount Clerk components
-      clerk.mountSignIn(document.getElementById("clerk-signin"));
-      clerk.mountUserButton(document.getElementById("clerk-user-button"));
-      clerk.mountSignOutButton(document.getElementById("clerk-signout-denied"));
+    // Initialize Clerk when page loads
+    document.addEventListener('DOMContentLoaded', initializeClerk);
 
-      // Handle authentication state changes
-      clerk.addListener(({ client, session, user }) => {
-        handleAuthStateChange(client, session, user);
-      });
+    async function initializeClerk() {
+      try {
+        console.log('Loading Clerk...');
 
-      // Initial auth check
-      handleAuthStateChange(clerk.client, clerk.session, clerk.user);
-    });
+        // Dynamically load Clerk script
+        const script = document.createElement('script');
+        script.src = 'https://welcome-cowbird-96.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
+        script.async = true;
 
-    async function handleAuthStateChange(client, session, user) {
+        script.onload = async () => {
+          try {
+            console.log('Clerk script loaded, initializing...');
+            clerk = new window.Clerk(CLERK_PUBLISHABLE_KEY);
+            await clerk.load();
+            console.log('Clerk loaded successfully');
+            handleAuthState();
+          } catch (error) {
+            console.error('Error initializing Clerk:', error);
+            showError('Failed to initialize authentication system: ' + error.message);
+          }
+        };
+
+        script.onerror = () => {
+          console.error('Failed to load Clerk script');
+          showError('Failed to load authentication system');
+        };
+
+        document.head.appendChild(script);
+      } catch (error) {
+        console.error('Error in initializeClerk:', error);
+        showError('Authentication system error: ' + error.message);
+      }
+    }
+
+    function handleAuthState() {
       const authLoading = document.getElementById('authLoading');
       const signInPrompt = document.getElementById('signInPrompt');
       const accessDenied = document.getElementById('accessDenied');
       const mainContent = document.getElementById('mainContent');
 
-      // Hide all sections first
+      // Hide all sections
       authLoading.style.display = 'none';
       signInPrompt.style.display = 'none';
       accessDenied.style.display = 'none';
       mainContent.style.display = 'none';
 
-      if (!session) {
-        // Not signed in
+      if (clerk.user) {
+        console.log('User is signed in:', clerk.user.emailAddresses[0]?.emailAddress);
+        checkAuthorization();
+      } else {
+        console.log('User not signed in, showing sign in prompt');
         signInPrompt.style.display = 'block';
-        return;
+
+        // Mount sign in component
+        try {
+          clerk.mountSignIn(document.getElementById('clerk-signin'), {
+            routing: 'hash',
+            signUpUrl: null, // Disable sign up
+            appearance: {
+              elements: {
+                rootBox: 'width: 100%;',
+                card: 'box-shadow: none; border: 1px solid #bae6fd;'
+              }
+            }
+          });
+        } catch (error) {
+          console.error('Error mounting sign in:', error);
+          showError('Failed to load sign in form');
+        }
       }
 
-      // User is signed in, check authorization with backend
+      // Listen for auth changes
+      clerk.addListener(({ session, user }) => {
+        console.log('Auth state changed:', { session: !!session, user: !!user });
+        if (user && session) {
+          checkAuthorization();
+        } else if (!user) {
+          handleAuthState();
+        }
+      });
+    }
+
+    async function checkAuthorization() {
       try {
+        console.log('Checking user authorization...');
+        const session = clerk.session;
+
+        if (!session) {
+          throw new Error('No active session');
+        }
+
+        const token = await session.getToken();
         const response = await fetch('/api/user', {
           headers: {
-            'Authorization': `Bearer ${await session.getToken()}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
 
         if (response.ok) {
           const userData = await response.json();
-          // User is authorized
+          console.log('User authorized:', userData.user);
+
+          // Update user info
           document.getElementById('userName').textContent = userData.user.name;
           document.getElementById('userEmail').textContent = userData.user.email;
-          mainContent.style.display = 'block';
 
-          // Load initial data
+          // Show main content
+          document.getElementById('mainContent').style.display = 'block';
+
+          // Mount user button
+          try {
+            clerk.mountUserButton(document.getElementById('clerk-user-button'));
+          } catch (error) {
+            console.warn('Failed to mount user button:', error);
+          }
+
+          // Load dashboard data
           await loadData();
           await loadDepartments();
           setupEventListeners();
+
         } else if (response.status === 403) {
-          // User is not authorized
           const errorData = await response.json();
+          console.log('User not authorized:', errorData);
+
           document.getElementById('accessDeniedMessage').textContent =
             errorData.error || 'Your account is not authorized to access this system.';
-          accessDenied.style.display = 'block';
+          document.getElementById('accessDenied').style.display = 'block';
+
         } else {
-          throw new Error('Failed to verify user authorization');
+          throw new Error(`Authorization check failed: ${response.status}`);
         }
       } catch (error) {
         console.error('Authorization check failed:', error);
-        // Show generic access denied
-        accessDenied.style.display = 'block';
+        showError('Failed to verify authorization: ' + error.message);
       }
     }
 
@@ -1005,6 +1076,32 @@
         currentPage++;
         displayPage();
       }
+    }
+
+    function signOut() {
+      if (clerk) {
+        clerk.signOut(() => {
+          window.location.reload();
+        });
+      }
+    }
+
+    function showError(message) {
+      document.getElementById('authLoading').innerHTML = `
+        <div style="color: #dc2626; font-size: 1.1rem; margin-bottom: 20px;">
+          Error: ${message}
+        </div>
+        <button onclick="window.location.reload()" style="
+          background: #0072bc;
+          color: white;
+          border: none;
+          padding: 12px 24px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 1rem;
+        ">Retry</button>
+      `;
+      document.getElementById('authLoading').style.display = 'block';
     }
   </script>
 </body>
