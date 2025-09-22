@@ -202,17 +202,20 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// ✅ Correct Clerk middleware import
-const { requireAuth } = require('@clerk/express');
+// Clerk: correct middlewares
+const { clerkMiddleware, requireAuth } = require('@clerk/express');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* ------------------------- CORS ------------------------- */
+/* ------------------------- Core middleware ------------------------- */
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-/* ------------------------- PostgreSQL ------------------------- */
+// VERY IMPORTANT: attach Clerk to every request
+app.use(clerkMiddleware());
+
+/* ---------------------------- PostgreSQL ---------------------------- */
 const must = (name) => {
   const v = process.env[name];
   if (!v) throw new Error(`Missing required env var: ${name}`);
@@ -228,7 +231,7 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
-/* ------------------------- Auth Utilities ------------------------- */
+/* ------------------------- Auth helpers ------------------------- */
 function getEmailFromClaims(claims = {}) {
   return (
     (claims.email && String(claims.email)) ||
@@ -239,7 +242,7 @@ function getEmailFromClaims(claims = {}) {
   );
 }
 
-/* ✅ Clerk session + DB allow-list check */
+// Clerk session + allow-list check in authentication table
 function requireAuthWithDbCheck(req, res, next) {
   return requireAuth()(req, res, async () => {
     try {
@@ -251,14 +254,12 @@ function requireAuthWithDbCheck(req, res, next) {
 
       const userEmail = String(email).toLowerCase();
       const client = await pool.connect();
-
       const { rows } = await client.query(
         `SELECT employee_email, employee_name, employee_nuid
-         FROM authentication
-         WHERE LOWER(employee_email) = $1`,
+           FROM authentication
+          WHERE LOWER(employee_email) = $1`,
         [userEmail]
       );
-
       client.release();
 
       if (rows.length === 0) {
@@ -281,20 +282,16 @@ function requireAuthWithDbCheck(req, res, next) {
   });
 }
 
-/* ------------------------- API ------------------------- */
+/* ----------------------------- API ----------------------------- */
 
-// Debug endpoint
+// Quick DB info (not protected) – helps verify DB rows from the browser
 app.get('/api/debug/dbinfo', async (_req, res) => {
   const client = await pool.connect();
   try {
-    const { rows: wtrCount } = await client.query(`SELECT COUNT(*) FROM work_time_records`);
-    const { rows: authCount } = await client.query(`SELECT COUNT(*) FROM authentication`);
-    const { rows: empCount } = await client.query(`SELECT COUNT(*) FROM employee`);
-    res.json({
-      work_time_records: wtrCount[0].count,
-      authentication: authCount[0].count,
-      employee: empCount[0].count,
-    });
+    const { rows: w } = await client.query(`SELECT COUNT(*)::int AS n FROM work_time_records`);
+    const { rows: a } = await client.query(`SELECT COUNT(*)::int AS n FROM authentication`);
+    const { rows: e } = await client.query(`SELECT COUNT(*)::int AS n FROM employee`);
+    res.json({ work_time_records: w[0].n, authentication: a[0].n, employee: e[0].n });
   } catch (e) {
     console.error('DB info error:', e);
     res.status(500).json({ error: 'Failed to fetch DB info' });
@@ -303,7 +300,7 @@ app.get('/api/debug/dbinfo', async (_req, res) => {
   }
 });
 
-// Current user
+// Current user (used by top-right chip)
 app.get('/api/user', requireAuthWithDbCheck, (req, res) => {
   res.json({ authenticated: true, user: req.user });
 });
@@ -326,7 +323,7 @@ app.get('/api/departments', requireAuthWithDbCheck, async (_req, res) => {
   }
 });
 
-// Work Time Records
+// Work Time Records (matches your SQL schema: work_time_records + approval_status)
 app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
   const client = await pool.connect();
   try {
@@ -350,7 +347,7 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
   }
 });
 
-// Update WTR status
+// Update status
 app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
   const id = Number(req.params.id);
   const { status } = req.body || {};
@@ -373,7 +370,7 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
-/* ------------------------- HTML Serving ------------------------- */
+/* ------------------------ HTML / Static ------------------------ */
 function serveHtml(fileName) {
   return (req, res) => {
     const p1 = path.join(__dirname, 'public', fileName);
@@ -393,9 +390,9 @@ app.get('/sign-in', serveHtml('Sign in.html'));
 app.get('/dashboard', serveHtml('index.html'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-/* ------------------------- Start Server ------------------------- */
+/* --------------------------- Start --------------------------- */
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🔑 Clerk publishable key present: ${!!process.env.CLERK_PUBLISHABLE_KEY}`);
-  console.log(`🌐 FRONTEND_URL: ${process.env.FRONTEND_URL || '(not set)'}`);
+  console.log(`🔑 PUBLISHABLE key present: ${!!process.env.CLERK_PUBLISHABLE_KEY}`);
+  console.log(`🔐 SECRET key present: ${!!process.env.CLERK_SECRET_KEY}`);
 });
