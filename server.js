@@ -199,3 +199,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🔑 PUBLISHABLE key present: ${!!process.env.CLERK_PUBLISHABLE_KEY}`);
   console.log(`🔐 SECRET key present: ${!!process.env.CLERK_SECRET_KEY}`);
 });
+
+
+// EOF
