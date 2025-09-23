@@ -922,14 +922,14 @@
             <td>
               <div class="action-buttons">
                 ${recordStatus === 'pending' ? `
-                  <button class="btn btn-success" onclick="updateStatus(${record.coda_wtr_id}, 'approved')">
+                  <button class="btn btn-success" onclick="updateStatus(event, '${String(record.coda_wtr_id).replace(/'/g, "\\'")}', 'approved')">
                     Approve
                   </button>
-                  <button class="btn btn-danger" onclick="updateStatus(${record.coda_wtr_id}, 'rejected')">
+                  <button class="btn btn-danger" onclick="updateStatus(event, '${String(record.coda_wtr_id).replace(/'/g, "\\'")}', 'rejected')">
                     Reject
                   </button>
                 ` : `
-                  <button class="btn btn-primary" onclick="updateStatus(${record.coda_wtr_id}, 'pending')" style="font-size: 0.8rem; padding: 6px 12px;">
+                  <button class="btn btn-primary" onclick="updateStatus(event, '${String(record.coda_wtr_id).replace(/'/g, "\\'")}', 'pending')" style="font-size: 0.8rem; padding: 6px 12px;">
                     Reset to Pending
                   </button>
                 `}
@@ -975,16 +975,18 @@
     }
 
     // Update record status - Fixed to handle the new API response structure
-    async function updateStatus(wtrId, newStatus) {
+    async function updateStatus(event, wtrId, newStatus) {
+      const button = event?.target;
+      const originalText = button?.textContent;
       try {
-        const button = event.target;
-        const originalText = button.textContent;
-        button.textContent = 'Updating...';
-        button.disabled = true;
+        if (button) {
+          button.textContent = 'Updating...';
+          button.disabled = true;
+        }
 
         console.log(`Updating WTR ${wtrId} to status: ${newStatus}`);
 
-        const response = await authedFetch(`/api/wtr/${wtrId}/status`, {
+        const response = await authedFetch(`/api/wtr/${encodeURIComponent(wtrId)}/status`, {
           method: 'PUT',
           body: JSON.stringify({ status: newStatus })
         });
@@ -992,9 +994,9 @@
         const result = await response.json();
         console.log('Update result:', result);
 
-        if (result.success) {
+        if (result.ok) {
           // Update local data - use coda_wtr_id for matching
-          const recordIndex = wtrData.findIndex(r => r.coda_wtr_id === wtrId);
+          const recordIndex = wtrData.findIndex(r => String(r.coda_wtr_id) === String(wtrId));
           if (recordIndex !== -1) {
             wtrData[recordIndex].status = newStatus;
             wtrData[recordIndex].approval_status = newStatus;
@@ -1002,23 +1004,19 @@
 
           // Re-apply filters and update display
           applyFilters();
+          updateStats();
           console.log(`Successfully updated WTR ${wtrId} to ${newStatus}`);
         } else {
-          throw new Error(result.error || 'Update failed');
+          throw new Error(result.error || result.message || 'Update failed');
         }
 
       } catch (error) {
         console.error('Status update failed:', error);
         showError(`Failed to update status: ${error.message}`);
-
-        // Reset button
-        const button = event.target;
+      } finally {
         if (button) {
-          button.textContent = button.textContent.replace('Updating...', 'Update Failed');
-          setTimeout(() => {
-            button.textContent = originalText;
-            button.disabled = false;
-          }, 2000);
+          button.textContent = originalText;
+          button.disabled = false;
         }
       }
     }

@@ -4,9 +4,10 @@
   "description": "IECC Work Time Records Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "build": "echo \"No build step required\""
+  "start": "node server.js",
+  "dev": "node server.js",
+  "migrate": "node ./scripts/run_migrations.js",
+  "build": "echo \"No build step required\""
   },
   "dependencies": {
     "@clerk/express": "^1.7.31",
