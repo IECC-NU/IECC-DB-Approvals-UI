@@ -491,6 +491,25 @@ if (!AUTH_DISABLED && typeof clerkMiddleware === 'function') {
   console.log('⚠️ Authentication disabled or Clerk not present; running in dev auth-bypass mode.');
 }
 
+// When true, include DB error details in responses (useful for debugging on deploy)
+const DEBUG_DB_ERRORS = String(process.env.DEBUG_DB_ERRORS || '').toLowerCase() === 'true';
+
+// Small helper to run queries with logging and parameter display
+async function tryQuery(client, sql, params = []) {
+  try {
+    console.log('🔎 Executing SQL:', sql.split('\n').map(l => l.trim()).filter(Boolean).slice(0,3).join(' | '));
+    console.log('🔎 Params:', params);
+    const res = await client.query(sql, params);
+    return res;
+  } catch (err) {
+    console.error('❌ Query failed:', err.message);
+    // attach SQL snippet to error for later inspection
+    err.query = sql;
+    err.params = params;
+    throw err;
+  }
+}
+
 /* ---------------------------- PostgreSQL ---------------------------- */
 const must = (name) => {
   const v = process.env[name];
@@ -783,8 +802,41 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
       ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
     `;
 
-    const { rows: wtrRows } = await client.query(wtrQuery);
-    console.log(`✅ Fetched ${wtrRows.length} work time records`);
+    let wtrRows = [];
+    try {
+      const result = await tryQuery(client, wtrQuery, []);
+      wtrRows = result.rows;
+      console.log(`✅ Fetched ${wtrRows.length} work time records`);
+    } catch (err) {
+      console.error('❌ Primary WTR query failed:', err.message);
+      if (DEBUG_DB_ERRORS) console.error('Query:', err.query, 'Params:', err.params, err.stack);
+      // Try fallback (legacy) query - older schema used wtr_id and different columns
+      const legacyQuery = `
+        SELECT 
+          wtr.wtr_id,
+          wtr.wtr_month,
+          wtr.wtr_year,
+          wtr.approval_status as status,
+          e.employee_name,
+          e.employee_nuid,
+          e.employee_email,
+          e.employee_title,
+          d.department_name
+        FROM work_time_records wtr
+        JOIN employee e ON e.employee_nuid = wtr.employee_nuid
+        LEFT JOIN department d ON d.department_id = e.department_id
+        ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
+      `;
+      try {
+        const legacyRes = await tryQuery(client, legacyQuery, []);
+        wtrRows = legacyRes.rows.map(r => ({ ...r, coda_wtr_id: r.wtr_id }));
+        console.log(`ℹ️ Fallback legacy WTR query returned ${wtrRows.length} records`);
+      } catch (legacyErr) {
+        console.error('❌ Legacy WTR query also failed:', legacyErr.message);
+        if (DEBUG_DB_ERRORS) console.error('Legacy Query:', legacyErr.query, 'Params:', legacyErr.params, legacyErr.stack);
+        throw legacyErr; // will be caught by outer try/catch
+      }
+    }
 
     // Step 2: Get all activities for these WTRs
     const activitiesQuery = `
@@ -808,9 +860,15 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
     const wtrIds = wtrRows.map(row => row.coda_wtr_id).filter(v => v !== null && v !== undefined);
     let activityRows = [];
     if (wtrIds.length > 0) {
-      const { rows: fetchedActivities } = await client.query(activitiesQuery, [wtrIds]);
-      activityRows = fetchedActivities;
-      console.log(`✅ Fetched ${activityRows.length} activity records`);
+      try {
+        const { rows: fetchedActivities } = await tryQuery(client, activitiesQuery, [wtrIds]);
+        activityRows = fetchedActivities;
+        console.log(`✅ Fetched ${activityRows.length} activity records`);
+      } catch (actErr) {
+        console.error('⚠️ Activities query failed, continuing without activities:', actErr.message);
+        if (DEBUG_DB_ERRORS) console.error('Activities Query:', actErr.query, 'Params:', actErr.params, actErr.stack);
+        activityRows = [];
+      }
     } else {
       console.log('ℹ️ No WTR IDs found; skipping activities query');
     }
@@ -865,9 +923,10 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
     res.json(enrichedWTRs);
   } catch (err) {
     console.error('❌ WTR query error:', err);
+    const details = DEBUG_DB_ERRORS ? { message: err.message, query: err.query, params: err.params, stack: err.stack } : (process.env.NODE_ENV === 'development' ? err.message : 'Database error');
     res.status(500).json({
       error: 'Failed to fetch work time records',
-      details: process.env.NODE_ENV === 'development' ? err.message : 'Database error'
+      details
     });
   } finally {
     client.release();
