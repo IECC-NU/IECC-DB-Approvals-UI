@@ -10,7 +10,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 /* ------------------------- Middleware ------------------------- */
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({ 
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-railway-domain.railway.app'] 
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  credentials: true 
+}));
 app.use(express.json());
 app.use(clerkMiddleware());
 
@@ -21,78 +26,107 @@ const must = (name) => {
   return v;
 };
 
-// Add connection retry logic and better error handling
+// PostgreSQL connection with Railway-specific configuration
 const pool = new Pool({
-  host: must('PGHOST'),
-  port: Number(process.env.PGPORT || 5432),
-  user: must('PGUSER'),
-  password: must('PGPASSWORD'),
-  database: must('PGDATABASE'),
+  connectionString: process.env.DATABASE_URL || `postgresql://${must('PGUSER')}:${must('PGPASSWORD')}@${must('PGHOST')}:${process.env.PGPORT || 5432}/${must('PGDATABASE')}`,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 30000,
   idleTimeoutMillis: 30000,
-  max: 10,
+  max: 20,
+  min: 5,
 });
 
-// Test database connection on startup
-pool.connect()
-  .then(client => {
-    console.log('✅ Database connected successfully');
-    client.release();
-  })
-  .catch(err => {
-    console.error('❌ Database connection failed:', err.message);
-  });
+// Test database connection on startup with retry logic
+async function connectWithRetry(retries = 5) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const client = await pool.connect();
+      console.log('✅ Database connected successfully');
+      
+      // Test basic query
+      const result = await client.query('SELECT NOW()');
+      console.log('✅ Database query test passed:', result.rows[0].now);
+      
+      client.release();
+      return;
+    } catch (err) {
+      console.error(`❌ Database connection attempt ${i + 1} failed:`, err.message);
+      if (i === retries - 1) {
+        console.error('❌ All database connection attempts failed');
+        throw err;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+}
+
+// Initialize database connection
+connectWithRetry().catch(err => {
+  console.error('❌ Fatal: Could not connect to database:', err);
+  process.exit(1);
+});
 
 /* ------------------------- Auth Helpers ------------------------- */
 function getEmailFromClaims(claims = {}) {
-  return (
-    claims.email ||
-    claims.email_address ||
-    claims.primary_email_address ||
-    (Array.isArray(claims.email_addresses) && claims.email_addresses[0]) ||
-    null
-  );
+  // More comprehensive email extraction
+  const possibleEmails = [
+    claims.email,
+    claims.email_address,
+    claims.primary_email_address,
+    claims.primaryEmailAddress?.emailAddress,
+    Array.isArray(claims.email_addresses) ? claims.email_addresses[0] : null,
+    Array.isArray(claims.emailAddresses) ? claims.emailAddresses[0]?.emailAddress : null
+  ];
+  
+  return possibleEmails.find(email => email && typeof email === 'string') || null;
 }
 
 function requireAuthWithDbCheck(req, res, next) {
   return requireAuth()(req, res, async () => {
     try {
-      const email =
-        getEmailFromClaims(req.auth?.sessionClaims) ||
-        getEmailFromClaims(req.auth?.claims);
+      console.log('🔐 Auth check starting...');
+      console.log('Auth object keys:', Object.keys(req.auth || {}));
+      console.log('Session claims:', req.auth?.sessionClaims);
       
-      console.log('Auth check - Email from claims:', email);
-      console.log('Auth object:', JSON.stringify(req.auth, null, 2));
+      const email = getEmailFromClaims(req.auth?.sessionClaims) || getEmailFromClaims(req.auth?.claims);
       
       if (!email) {
         console.log('❌ No email found in session claims');
-        return res.status(403).json({ error: 'Email not found in session' });
+        console.log('Available claims:', JSON.stringify(req.auth, null, 2));
+        return res.status(403).json({ 
+          error: 'Email not found in session',
+          debug: {
+            hasAuth: !!req.auth,
+            hasSessionClaims: !!req.auth?.sessionClaims,
+            claimsKeys: req.auth?.sessionClaims ? Object.keys(req.auth.sessionClaims) : []
+          }
+        });
       }
 
-      const userEmail = String(email).toLowerCase();
-      console.log('Looking for user with email:', userEmail);
+      const userEmail = String(email).toLowerCase().trim();
+      console.log('🔍 Looking for user with email:', userEmail);
       
       const client = await pool.connect();
       try {
+        // First, let's see what's in the authentication table
+        const { rows: allAuth } = await client.query('SELECT employee_email FROM authentication LIMIT 10');
+        console.log('📋 Sample authentication records:', allAuth.map(r => r.employee_email));
+        
         const { rows } = await client.query(
           `SELECT employee_email, employee_name, employee_nuid
            FROM authentication
-           WHERE LOWER(employee_email) = $1`,
+           WHERE LOWER(TRIM(employee_email)) = $1`,
           [userEmail]
         );
         
-        console.log(`Found ${rows.length} matching users in database`);
+        console.log(`📊 Found ${rows.length} matching users in database`);
         
         if (rows.length === 0) {
           console.log('❌ User not found in authentication table');
-          // Let's also check what users exist
-          const { rows: allUsers } = await client.query('SELECT employee_email FROM authentication');
-          console.log('Available users in DB:', allUsers.map(u => u.employee_email));
           return res.status(403).json({ 
             error: 'Access denied - user not authorized', 
             email: userEmail,
-            availableUsers: allUsers.map(u => u.employee_email)
+            hint: 'Contact administrator to add your email to the system'
           });
         }
 
@@ -104,41 +138,99 @@ function requireAuthWithDbCheck(req, res, next) {
       }
     } catch (err) {
       console.error('❌ Auth/DB check error:', err);
-      res.status(500).json({ error: 'Authentication verification failed', details: err.message });
+      res.status(500).json({ 
+        error: 'Authentication verification failed', 
+        details: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+      });
     }
   });
 }
 
 /* ----------------------------- API ----------------------------- */
-app.get('/api/debug/dbinfo', async (_req, res) => {
+
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
   try {
     const client = await pool.connect();
     try {
-      const { rows: w } = await client.query(`SELECT COUNT(*)::int AS n FROM work_time_records`);
-      const { rows: a } = await client.query(`SELECT COUNT(*)::int AS n FROM authentication`);
-      const { rows: e } = await client.query(`SELECT COUNT(*)::int AS n FROM employee`);
-      const { rows: authUsers } = await client.query(`SELECT employee_email, employee_name FROM authentication`);
+      await client.query('SELECT 1');
+      res.json({ 
+        status: 'healthy', 
+        database: 'connected',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development'
+      });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Health check failed:', err);
+    res.status(500).json({ 
+      status: 'unhealthy', 
+      database: 'disconnected',
+      error: err.message 
+    });
+  }
+});
+
+app.get('/api/debug/dbinfo', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    try {
+      // Check if tables exist
+      const { rows: tables } = await client.query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN ('work_time_records', 'authentication', 'employee', 'department')
+      `);
+      
+      const tableNames = tables.map(t => t.table_name);
+      
+      let counts = {};
+      let samples = {};
+      
+      for (const tableName of tableNames) {
+        try {
+          const { rows: countRows } = await client.query(`SELECT COUNT(*)::int AS n FROM ${tableName}`);
+          counts[tableName] = countRows[0].n;
+          
+          // Get sample data
+          const { rows: sampleRows } = await client.query(`SELECT * FROM ${tableName} LIMIT 3`);
+          samples[tableName] = sampleRows;
+        } catch (err) {
+          counts[tableName] = `Error: ${err.message}`;
+          samples[tableName] = [];
+        }
+      }
       
       res.json({ 
-        work_time_records: w[0].n, 
-        authentication: a[0].n, 
-        employee: e[0].n,
-        auth_users: authUsers
+        tables_found: tableNames,
+        counts,
+        samples: process.env.NODE_ENV === 'development' ? samples : 'Hidden in production'
       });
     } finally {
       client.release();
     }
   } catch (err) {
     console.error('Database info error:', err);
-    res.status(500).json({ error: 'Database connection failed', details: err.message });
+    res.status(500).json({ 
+      error: 'Database connection failed', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 
 app.get('/api/user', requireAuthWithDbCheck, (req, res) => {
-  res.json({ authenticated: true, user: req.user });
+  res.json({ 
+    authenticated: true, 
+    user: req.user,
+    timestamp: new Date().toISOString()
+  });
 });
 
-app.get('/api/departments', requireAuthWithDbCheck, async (_req, res) => {
+app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(`
@@ -146,18 +238,24 @@ app.get('/api/departments', requireAuthWithDbCheck, async (_req, res) => {
       FROM department
       ORDER BY department_name
     `);
+    console.log(`📋 Fetched ${rows.length} departments`);
     res.json(rows);
   } catch (err) {
-    console.error('Departments query error:', err);
-    res.status(500).json({ error: 'Failed to fetch departments', details: err.message });
+    console.error('❌ Departments query error:', err);
+    res.status(500).json({ 
+      error: 'Failed to fetch departments', 
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Database error'
+    });
   } finally {
     client.release();
   }
 });
 
-app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
+app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   const client = await pool.connect();
   try {
+    console.log('📊 Fetching work time records...');
+    
     const { rows } = await client.query(`
       SELECT 
         wtr.wtr_id,
@@ -170,16 +268,21 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
         e.employee_name,
         e.employee_email,
         e.employee_title,
-        d.department_name
+        COALESCE(d.department_name, 'Unassigned') as department_name
       FROM work_time_records wtr
       JOIN employee e ON wtr.employee_nuid = e.employee_nuid
       LEFT JOIN department d ON e.department_id = d.department_id
       ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
     `);
+    
+    console.log(`✅ Fetched ${rows.length} work time records`);
     res.json(rows);
   } catch (err) {
-    console.error('WTR query error:', err);
-    res.status(500).json({ error: 'Failed to fetch work time records', details: err.message });
+    console.error('❌ WTR query error:', err);
+    res.status(500).json({ 
+      error: 'Failed to fetch work time records', 
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Database error'
+    });
   } finally {
     client.release();
   }
@@ -188,20 +291,44 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (_req, res) => {
 app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
   const id = Number(req.params.id);
   const { status } = req.body || {};
-  const allowed = new Set(['pending', 'approved', 'rejected']);
-  if (!allowed.has(String(status).toLowerCase())) {
-    return res.status(400).json({ error: 'Invalid status' });
+  
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Invalid WTR ID' });
   }
+  
+  const allowed = new Set(['pending', 'approved', 'rejected']);
+  const normalizedStatus = String(status).toLowerCase();
+  
+  if (!allowed.has(normalizedStatus)) {
+    return res.status(400).json({ 
+      error: 'Invalid status', 
+      allowed: Array.from(allowed) 
+    });
+  }
+  
   const client = await pool.connect();
   try {
-    await client.query(
-      `UPDATE work_time_records SET approval_status = $1 WHERE wtr_id = $2`,
-      [status, id]
+    console.log(`🔄 Updating WTR ${id} status to ${normalizedStatus}`);
+    
+    const { rowCount } = await client.query(
+      `UPDATE work_time_records 
+       SET approval_status = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE wtr_id = $2`,
+      [normalizedStatus, id]
     );
-    res.json({ ok: true });
+    
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'Work time record not found' });
+    }
+    
+    console.log(`✅ Successfully updated WTR ${id}`);
+    res.json({ success: true, updated: rowCount });
   } catch (err) {
-    console.error('Status update error:', err);
-    res.status(500).json({ error: 'Failed to update status', details: err.message });
+    console.error('❌ Status update error:', err);
+    res.status(500).json({ 
+      error: 'Failed to update status', 
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Database error'
+    });
   } finally {
     client.release();
   }
@@ -213,30 +340,74 @@ function serveHtml(fileName) {
     const filePath = path.join(__dirname, fileName);
     fs.readFile(filePath, 'utf8', (err, html) => {
       if (err) {
-        console.error(`Error reading ${fileName}:`, err);
-        return res.status(500).send('Server error');
+        console.error(`❌ Error reading ${fileName}:`, err);
+        return res.status(500).send(`
+          <h1>Server Error</h1>
+          <p>Could not load ${fileName}</p>
+          <p>Make sure the file exists in the project root.</p>
+        `);
       }
-      const injected = html.replace(/\$\{CLERK_PUBLISHABLE_KEY\}/g, process.env.CLERK_PUBLISHABLE_KEY || '');
+      
+      const injected = html.replace(
+        /\$\{CLERK_PUBLISHABLE_KEY\}/g, 
+        process.env.CLERK_PUBLISHABLE_KEY || ''
+      );
+      
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.send(injected);
     });
   };
 }
 
+// Routes
 app.get('/', serveHtml('Sign in.html'));
 app.get('/sign-in', serveHtml('Sign in.html'));
 app.get('/dashboard', serveHtml('index.html'));
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  pool.end();
-  process.exit(0);
+// Serve static files (images, etc.)
+app.use(express.static(path.join(__dirname), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
+    }
+  }
+}));
+
+// 404 handler
+app.use('*', (req, res) => {
+  console.log(`❌ 404: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ 
+    error: 'Not found', 
+    path: req.originalUrl,
+    method: req.method 
+  });
 });
 
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('❌ Unhandled error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// Handle graceful shutdown
+const gracefulShutdown = () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully');
+  pool.end(() => {
+    console.log('📊 Database pool closed');
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+// Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);
   console.log(`🔐 Sign in: http://localhost:${PORT}/sign-in`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });

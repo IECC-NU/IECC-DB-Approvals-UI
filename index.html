@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IECC WTR Manager Dashboard</title>
+
+  <!-- Clerk (latest) -->
+  <script async crossorigin="anonymous" data-clerk-publishable-key="${CLERK_PUBLISHABLE_KEY}"
+    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
+    </script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0072bc 0%, #004c8c 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.97);
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(10px);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .header img {
+      max-height: 70px;
+      margin-bottom: 15px;
+    }
+
+    .header h1 {
+      font-size: 2.3rem;
+      font-weight: bold;
+      color: #004c8c;
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      font-size: 1.1rem;
+      color: #0072bc;
+      font-weight: 500;
+    }
+
+    .controls {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+      align-items: center;
+      border-top: 1px solid #e0e0e0;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 20px 0;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 150px;
+    }
+
+    .control-group label {
+      font-weight: 600;
+      color: #004c8c;
+      font-size: 0.9rem;
+    }
+
+    select,
+    input {
+      padding: 12px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      min-width: 150px;
+    }
+
+    select:focus,
+    input:focus {
+      outline: none;
+      border-color: #0072bc;
+      box-shadow: 0 0 0 3px rgba(0, 114, 188, 0.15);
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 1rem;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0072bc, #004c8c);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(0, 76, 140, 0.3);
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+      padding: 8px 16px;
+      font-size: 0.9rem;
+    }
+
+    .btn-secondary:hover {
+      background: #4b5563;
+      transform: translateY(-1px);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+      padding: 20px;
+      border-radius: 15px;
+      text-align: center;
+      border: 1px solid #bae6fd;
+    }
+
+    .stat-card h3 {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #004c8c;
+      margin-bottom: 5px;
+    }
+
+    .stat-card p {
+      color: #0369a1;
+      font-weight: 500;
+    }
+
+    .table-container {
+      background: white;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, .08);
+      border: 1px solid #e5e7eb;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: linear-gradient(135deg, #0072bc, #004c8c);
+    }
+
+    thead th {
+      color: white;
+      padding: 16px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: .9rem;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    tbody tr {
+      transition: all .3s ease;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    tbody tr:hover {
+      background: #f0f9ff;
+    }
+
+    tbody td {
+      padding: 14px 12px;
+      color: #374151;
+      font-size: .9rem;
+    }
+
+    .status-pending {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+
+    .status-approved {
+      background: linear-gradient(135deg, #16a34a, #15803d);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+
+    .status-rejected {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      color: #64748b;
+      font-size: 1.1rem;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .error {
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 20px;
+      border-radius: 10px;
+      margin: 20px 0;
+    }
+
+    .error h3 {
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .error details {
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+
+    .debug-info {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 10px 0;
+      font-family: monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+    }
+
+    .no-data {
+      text-align: center;
+      padding: 40px;
+      color: #64748b;
+      font-size: 1.1rem;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      font-size: .9rem;
+      color: #004c8c;
+      background: #e6f1fb;
+      border: 1px solid #cfe7ff;
+      padding: 8px 12px;
+      border-radius: 999px;
+    }
+
+    .action-btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin: 0 2px;
+    }
+
+    .approve-btn {
+      background: #16a34a;
+      color: white;
+    }
+
+    .reject-btn {
+      background: #dc2626;
+      color: white;
+    }
+
+    .reset-btn {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .action-btn:hover {
+      opacity: 0.8;
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 768px) {
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .container {
+        padding: 15px;
+      }
+
+      .table-container {
+        overflow-x: auto;
+      }
+
+      .topbar {
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="topbar">
+      <span id="userDisplay" class="chip">Loading user...</span>
+      <button class="btn btn-secondary" id="signOutBtn">Sign Out</button>
+    </div>
+
+    <div class="header">
+      <img src="IECC Logo.png" alt="IECC Logo" onerror="this.style.display='none'">
+      <h1>IECC Work Time Records</h1>
+      <p>Approve and manage employee work time submissions</p>
+    </div>
+
+    <!-- Error Display -->
+    <div id="errorContainer" style="display: none;"></div>
+
+    <!-- Filters -->
+    <div class="controls">
+      <div class="control-group">
+        <label>Filter by Status</label>
+        <select id="statusFilter">
+          <option value="all">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Filter by Department</label>
+        <select id="departmentFilter">
+          <option value="all">All Departments</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Filter by Month</label>
+        <select id="monthFilter">
+          <option value="all">All Months</option>
+          <option value="1">January</option>
+          <option value="2">February</option>
+          <option value="3">March</option>
+          <option value="4">April</option>
+          <option value="5">May</option>
+          <option value="6">June</option>
+          <option value="7">July</option>
+          <option value="8">August</option>
+          <option value="9">September</option>
+          <option value="10">October</option>
+          <option value="11">November</option>
+          <option value="12">December</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Filter by Year</label>
+        <select id="yearFilter">
+          <option value="all">All Years</option>
+          <option value="2024">2024</option>
+          <option value="2025">2025</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Search Employee</label>
+        <input type="text" id="searchEmployee" placeholder="Search by name or email">
+      </div>
+
+      <button class="btn btn-primary" id="refreshBtn">Refresh Data</button>
+      <button class="btn btn-secondary" id="debugBtn">Debug Info</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="stats" id="statsContainer">
+      <div class="stat-card">
+        <h3 id="totalRecords">0</h3>
+        <p>Total Records</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="pendingRecords">0</h3>
+        <p>Pending Approval</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="approvedRecords">0</h3>
+        <p>Approved</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="rejectedRecords">0</h3>
+        <p>Rejected</p>
+      </div>
+    </div>
+
+    <div class="loading" id="loading">
+      <p>Loading data...</p>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Employee Info</th>
+            <th>Period</th>
+            <th>Hours</th>
+            <th>Department</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="dataTable"></tbody>
+      </table>
+    </div>
+
+    <div class="no-data" id="noData" style="display:none;">
+      <p>No work time records found.</p>
+    </div>
+  </div>
+
+  <script>
+    let wtrData = [], filteredData = [];
+    let isInitialized = false;
+
+    // Enhanced fetch with better error handling
+    async function authedFetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+      headers.set('Content-Type', 'application/json');
+
+      try {
+        const token = await window.Clerk?.session?.getToken?.();
+        if (token) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+      } catch (err) {
+        console.warn('Could not get Clerk token:', err);
+      }
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+      }
+
+      return response;
+    }
+
+    // Error display helper
+    function showError(message, details = null) {
+      const container = document.getElementById('errorContainer');
+      container.innerHTML = `
+        <div class="error">
+          <h3>Error</h3>
+          <p>${message}</p>
+          ${details ? `<details><summary>Technical Details</summary><div class="debug-info">${details}</div></details>` : ''}
+        </div>
+      `;
+      container.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('errorContainer').style.display = 'none';
+    }
+
+    // Wait for Clerk to load
+    const waitForClerk = () => new Promise((resolve, reject) => {
+      const start = Date.now();
+      const checkInterval = setInterval(() => {
+        if (window.Clerk && typeof window.Clerk.load === 'function') {
+          clearInterval(checkInterval);
+          resolve();
+        } else if (Date.now() - start > 15000) {
+          clearInterval(checkInterval);
+          reject(new Error('Clerk SDK failed to load within 15 seconds'));
+        }
+      }, 100);
+    });
+
+    // Initialize the application
+    async function initApp() {
+      try {
+        hideError();
+        console.log('🚀 Initializing application...');
+
+        await waitForClerk();
+        await window.Clerk.load();
+
+        if (!window.Clerk.user) {
+          console.log('❌ User not authenticated, redirecting to sign-in');
+          window.location.href = '/sign-in';
+          return;
+        }
+
+        const user = window.Clerk.user;
+        const userEmail = user.primaryEmailAddress?.emailAddress || 'Signed in';
+        document.getElementById('userDisplay').textContent = userEmail;
+
+        document.getElementById('signOutBtn').onclick = async () => {
+          try {
+            await window.Clerk.signOut();
+            window.location.href = '/sign-in';
+          } catch (err) {
+            console.error('Sign out error:', err);
+          }
+        };
+
+        console.log('✅ Authentication successful');
+
+        // Load initial data
+        await loadData();
+        await populateDepartments();
+        applyFilters();
+        updateStats();
+
+        // Set up event listeners
+        setupEventListeners();
+
+        isInitialized = true;
+        console.log('✅ Application initialized successfully');
+
+      } catch (error) {
+        console.error('❌ Initialization error:', error);
+        showError(
+          'Failed to initialize the application. Please refresh the page.',
+          error.message
+        );
+      }
+    }
+
+    // Load work time records
+    async function loadData() {
+      console.log('📊 Loading work time records...');
+      document.getElementById('loading').classList.add('show');
+
+      try {
+        const response = await authedFetch('/api/wtr');
+        wtrData = await response.json();
+        filteredData = [...wtrData];
+
+        console.log(`✅ Loaded ${wtrData.length} work time records`);
+
+        if (wtrData.length === 0) {
+          document.getElementById('noData').style.display = 'block';
+        } else {
+          document.getElementById('noData').style.display = 'none';
+        }
+
+      } catch (error) {
+        console.error('❌ Failed to load work time records:', error);
+        showError('Failed to load work time records', error.message);
+        wtrData = [];
+        filteredData = [];
+      } finally {
+        document.getElementById('loading').classList.remove('show');
+      }
+    }
+
+    // Load departments for filter
+    async function populateDepartments() {
+      try {
+        console.log('🏢 Loading departments...');
+        const response = await authedFetch('/api/departments');
+        const departments = await response.json();
+
+        const select = document.getElementById('departmentFilter');
+        select.innerHTML = '<option value="all">All Departments</option>';
+
+        departments.forEach(dept => {
+          const option = document.createElement('option');
+          option.value = dept.department_name;
+          option.textContent = dept.department_name;
+          select.appendChild(option);
+        });
+
+        console.log(`✅ Loaded ${departments.length} departments`);
+
+      } catch (error) {
+        console.error('❌ Failed to load departments:', error);
+        showError('Failed to load departments', error.message);
+      }
+    }
+
+    // Apply filters to data
+    function applyFilters() {
+      const statusFilter = document.getElementById('statusFilter').value;
+      const departmentFilter = document.getElementById('departmentFilter').value;
+      const monthFilter = document.getElementById('monthFilter').value;
+      const yearFilter = document.getElementById('yearFilter').value;
+      const searchFilter = document.getElementById('searchEmployee').value.toLowerCase();
+
+      filteredData = wtrData.filter(record => {
+        // Status filter
+        if (statusFilter !== 'all' && record.status !== statusFilter) {
+          return false;
+        }
+
+        // Department filter
+        if (departmentFilter !== 'all' && record.department_name !== departmentFilter) {
+          return false;
+        }
+
+        // Month filter
+        if (monthFilter !== 'all' && record.wtr_month != monthFilter) {
+          return false;
+        }
+
+        // Year filter
+        if (yearFilter !== 'all' && record.wtr_year != yearFilter) {
+          return false;
+        }
+
+        // Search filter
+        if (searchFilter &&
+          !record.employee_name.toLowerCase().includes(searchFilter) &&
+          !record.employee_email.toLowerCase().includes(searchFilter)) {
+          return false;
+        }
+
+        return true;
+      });
+
+      renderData();
+      updateStats();
+    }
+
+    // Render table data
+    function renderData() {
+      const tbody = document.getElementById('dataTable');
+
+      if (filteredData.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">
+              No records match your current filters
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filteredData.map(record => `
+        <tr data-id="${record.wtr_id}">
+          <td>
+            <div><strong>${record.employee_name}</strong></div>
+            <div style="font-size: 0.8rem; color: #64748b;">${record.employee_email}</div>
+          </td>
+          <td>${record.wtr_month}/${record.wtr_year}</td>
+          <td>
+            <div>${record.total_submitted_hours}h submitted</div>
+            <div style="font-size: 0.8rem; color: #64748b;">${record.expected_hours}h expected</div>
+          </td>
+          <td>${record.department_name || 'Unassigned'}</td>
+          <td><span class="status-${record.status}">${record.status.charAt(0).toUpperCase() + record.status.slice(1)}</span></td>
+          <td>
+            ${record.status === 'pending' ? `
+              <button class="action-btn approve-btn" onclick="updateStatus(${record.wtr_id}, 'approved')">Approve</button>
+              <button class="action-btn reject-btn" onclick="updateStatus(${record.wtr_id}, 'rejected')">Reject</button>
+            ` : `
+              <button class="action-btn reset-btn" onclick="updateStatus(${record.wtr_id}, 'pending')">Reset</button>
+            `}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Update record status
+    async function updateStatus(wtrId, newStatus) {
+      try {
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = 'Updating...';
+        button.disabled = true;
+
+        const response = await authedFetch(`/api/wtr/${wtrId}/status`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: newStatus })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // Update local data
+          const recordIndex = wtrData.findIndex(r => r.wtr_id === wtrId);
+          if (recordIndex !== -1) {
+            wtrData[recordIndex].status = newStatus;
+          }
+
+          // Re-apply filters and update display
+          applyFilters();
+
+          console.log(`✅ Updated WTR ${wtrId} to ${newStatus}`);
+        } else {
+          throw new Error(result.error || 'Update failed');
+        }
+
+      } catch (error) {
+        console.error('❌ Status update failed:', error);
+        showError(`Failed to update status: ${error.message}`);
+
+        // Reset button
+        const button = event.target;
+        button.textContent = originalText;
+        button.disabled = false;
+      }
+    }
+
+    // Update statistics
+    function updateStats() {
+      const total = filteredData.length;
+      const pending = filteredData.filter(r => r.status === 'pending').length;
+      const approved = filteredData.filter(r => r.status === 'approved').length;
+      const rejected = filteredData.filter(r => r.status === 'rejected').length;
+
+      document.getElementById('totalRecords').textContent = total;
+      document.getElementById('pendingRecords').textContent = pending;
+      document.getElementById('approvedRecords').textContent = approved;
+      document.getElementById('rejectedRecords').textContent = rejected;
+    }
+
+    // Set up event listeners
+    function setupEventListeners() {
+      // Filter change events
+      ['statusFilter', 'departmentFilter', 'monthFilter', 'yearFilter'].forEach(id => {
+        document.getElementById(id).addEventListener('change', applyFilters);
+      });
+
+      // Search input with debounce
+      let searchTimeout;
+      document.getElementById('searchEmployee').addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(applyFilters, 300);
+      });
+
+      // Refresh button
+      document.getElementById('refreshBtn').addEventListener('click', async () => {
+        await loadData();
+        await populateDepartments();
+        applyFilters();
+      });
+
+      // Debug button
+      document.getElementById('debugBtn').addEventListener('click', showDebugInfo);
+    }
+
+    // Show debug information
+    async function showDebugInfo() {
+      try {
+        const [healthResponse, dbInfoResponse] = await Promise.all([
+          authedFetch('/api/health'),
+          authedFetch('/api/debug/dbinfo')
+        ]);
+
+        const health = await healthResponse.json();
+        const dbInfo = await dbInfoResponse.json();
+
+        const debugInfo = {
+          timestamp: new Date().toISOString(),
+          health,
+          database: dbInfo,
+          localData: {
+            totalRecords: wtrData.length,
+            filteredRecords: filteredData.length,
+            sampleRecord: wtrData[0] || 'No records'
+          },
+          clerk: {
+            loaded: !!window.Clerk,
+            authenticated: !!window.Clerk?.user,
+            userEmail: window.Clerk?.user?.primaryEmailAddress?.emailAddress
+          }
+        };
+
+        showError('Debug Information', JSON.stringify(debugInfo, null, 2));
+
+      } catch (error) {
+        showError('Debug failed', error.message);
+      }
+    }
+
+    // Make updateStatus available globally
+    window.updateStatus = updateStatus;
+
+    // Start the application
+    initApp().catch(error => {
+      console.error('Fatal initialization error:', error);
+      showError('Application failed to start', error.message);
+    });
+
+  </script>
+</body>
+
+</html>
