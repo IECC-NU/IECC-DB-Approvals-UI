@@ -451,8 +451,7 @@
 //   console.log(`🔐 Sign in: http://localhost:${PORT}/sign-in`);
 //   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 // });
-
-// // server.js - Updated email extraction and auth handling
+// server.js - Fixed database queries and data structure
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -462,7 +461,6 @@ let clerkMiddleware, requireAuth;
 try {
   ({ clerkMiddleware, requireAuth } = require('@clerk/express'));
 } catch (err) {
-  // Clerk may not be installed in local dev; we'll conditionally enable auth below
   console.warn('Clerk not available; running with conditional auth.');
 }
 
@@ -477,12 +475,12 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-// Support a development bypass for auth. Set DISABLE_AUTH=true to skip Clerk
+
 const DISABLE_AUTH = String(process.env.DISABLE_AUTH || '').toLowerCase() === 'true';
 if (!DISABLE_AUTH && typeof clerkMiddleware === 'function') {
   app.use(clerkMiddleware());
 } else {
-  console.log('⚠️ Authentication is disabled (DISABLE_AUTH=true). Using development user from env if provided.');
+  console.log('⚠️ Authentication is disabled (DISABLE_AUTH=true).');
 }
 
 /* ---------------------------- PostgreSQL ---------------------------- */
@@ -492,7 +490,6 @@ const must = (name) => {
   return v;
 };
 
-// PostgreSQL connection with Railway-specific configuration
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || `postgresql://${must('PGUSER')}:${must('PGPASSWORD')}@${must('PGHOST')}:${process.env.PGPORT || 5432}/${must('PGDATABASE')}`,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
@@ -502,17 +499,13 @@ const pool = new Pool({
   min: 5,
 });
 
-// Test database connection on startup with retry logic
 async function connectWithRetry(retries = 5) {
   for (let i = 0; i < retries; i++) {
     try {
       const client = await pool.connect();
       console.log('✅ Database connected successfully');
-
-      // Test basic query
       const result = await client.query('SELECT NOW()');
       console.log('✅ Database query test passed:', result.rows[0].now);
-
       client.release();
       return;
     } catch (err) {
@@ -526,7 +519,6 @@ async function connectWithRetry(retries = 5) {
   }
 }
 
-// Initialize database connection
 connectWithRetry().catch(err => {
   console.error('❌ Fatal: Could not connect to database:', err);
   process.exit(1);
@@ -536,7 +528,6 @@ connectWithRetry().catch(err => {
 function getEmailFromClaims(claims = {}) {
   console.log('🔍 Full claims object:', JSON.stringify(claims, null, 2));
 
-  // Enhanced email extraction with more debugging
   const possibleEmails = [
     claims.email,
     claims.email_address,
@@ -544,23 +535,19 @@ function getEmailFromClaims(claims = {}) {
     claims.primaryEmailAddress?.emailAddress,
     Array.isArray(claims.email_addresses) ? claims.email_addresses[0] : null,
     Array.isArray(claims.emailAddresses) ? claims.emailAddresses[0]?.emailAddress : null,
-    // Additional paths that might exist
     claims['https://clerk.dev/email'],
     claims['clerk/email'],
-    claims.sub && claims.sub.includes('@') ? claims.sub : null // Sometimes sub contains email
+    claims.sub && claims.sub.includes('@') ? claims.sub : null
   ];
 
   console.log('🔍 Possible email values:', possibleEmails);
-
   const foundEmail = possibleEmails.find(email => email && typeof email === 'string' && email.includes('@'));
   console.log('📧 Found email:', foundEmail);
-
   return foundEmail || null;
 }
 
 async function getUserFromClerk(userId) {
   try {
-    // Try to fetch user data from Clerk API
     const response = await fetch(`https://api.clerk.dev/v1/users/${userId}`, {
       headers: {
         'Authorization': `Bearer ${process.env.CLERK_SECRET_KEY}`,
@@ -580,15 +567,21 @@ async function getUserFromClerk(userId) {
 }
 
 function requireAuthWithDbCheck(req, res, next) {
+  if (DISABLE_AUTH) {
+    // Development bypass
+    req.user = {
+      employee_email: process.env.DEV_USER_EMAIL || 'dev@iecc.edu',
+      employee_name: 'Development User',
+      employee_nuid: 'DEV001'
+    };
+    return next();
+  }
+
   return requireAuth()(req, res, async () => {
     try {
       console.log('🔐 Auth check starting...');
-      console.log('Auth object keys:', Object.keys(req.auth || {}));
-      console.log('Session claims:', req.auth?.sessionClaims);
-
       let email = getEmailFromClaims(req.auth?.sessionClaims) || getEmailFromClaims(req.auth?.claims);
 
-      // If no email in claims, try fetching from Clerk API using the user ID
       if (!email && req.auth?.sessionClaims?.sub) {
         console.log('🔍 No email in claims, trying Clerk API...');
         email = await getUserFromClerk(req.auth.sessionClaims.sub);
@@ -596,7 +589,6 @@ function requireAuthWithDbCheck(req, res, next) {
 
       if (!email) {
         console.log('❌ No email found in session claims or Clerk API');
-        console.log('Available claims:', JSON.stringify(req.auth, null, 2));
         return res.status(403).json({
           error: 'Email not found in session',
           debug: {
@@ -614,7 +606,6 @@ function requireAuthWithDbCheck(req, res, next) {
 
       const client = await pool.connect();
       try {
-        // First, let's see what's in the authentication table
         const { rows: allAuth } = await client.query('SELECT employee_email FROM authentication LIMIT 10');
         console.log('📋 Sample authentication records:', allAuth.map(r => r.employee_email));
 
@@ -654,7 +645,6 @@ function requireAuthWithDbCheck(req, res, next) {
 
 /* ----------------------------- API ----------------------------- */
 
-// Health check endpoint
 app.get('/api/health', async (req, res) => {
   try {
     const client = await pool.connect();
@@ -683,16 +673,14 @@ app.get('/api/debug/dbinfo', async (req, res) => {
   try {
     const client = await pool.connect();
     try {
-      // Check if tables exist
       const { rows: tables } = await client.query(`
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = 'public' 
-        AND table_name IN ('work_time_records', 'authentication', 'employee', 'department')
+        AND table_name IN ('work_time_records', 'authentication', 'employee', 'department', 'details_submission_logs', 'activity', 'projects')
       `);
 
       const tableNames = tables.map(t => t.table_name);
-
       let counts = {};
       let samples = {};
 
@@ -701,8 +689,7 @@ app.get('/api/debug/dbinfo', async (req, res) => {
           const { rows: countRows } = await client.query(`SELECT COUNT(*)::int AS n FROM ${tableName}`);
           counts[tableName] = countRows[0].n;
 
-          // Get sample data
-          const { rows: sampleRows } = await client.query(`SELECT * FROM ${tableName} LIMIT 3`);
+          const { rows: sampleRows } = await client.query(`SELECT * FROM ${tableName} LIMIT 2`);
           samples[tableName] = sampleRows;
         } catch (err) {
           counts[tableName] = `Error: ${err.message}`;
@@ -757,32 +744,104 @@ app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
+// FIXED: Corrected WTR API endpoint with proper data aggregation
 app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   const client = await pool.connect();
   try {
-    console.log('📊 Fetching work time records...');
+    console.log('📊 Fetching work time records with activities...');
 
-    const { rows } = await client.query(`
+    // Step 1: Get main WTR data with employee and department info
+    const wtrQuery = `
       SELECT 
+        wtr.coda_wtr_id as wtr_id,
         wtr.coda_wtr_id,
         wtr.wtr_month,
         wtr.wtr_year,
-        wtr.approval_status,
-        dsl.hours_submitted,
+        wtr.approval_status as status,
         e.employee_name,
-        d.department_name,
-        p.deal_name AS project_name,
-        a.activity_name AS activity
+        e.employee_nuid,
+        e.employee_email,
+        e.employee_title,
+        d.department_name
       FROM work_time_records AS wtr
       JOIN employee AS e ON e.employee_nuid = wtr.employee_nuid
       LEFT JOIN department AS d ON d.department_id = e.department_id
-      LEFT JOIN details_submission_logs dsl ON dsl.coda_wtr_id = wtr.coda_wtr_id
-      LEFT JOIN projects AS p ON p.project_id = dsl.project_id
-      LEFT JOIN activity AS a ON a.activity_id = dsl.activity_id
-    `);
+      ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
+    `;
 
-    console.log(`✅ Fetched ${rows.length} work time records`);
-    res.json(rows);
+    const { rows: wtrRows } = await client.query(wtrQuery);
+    console.log(`✅ Fetched ${wtrRows.length} work time records`);
+
+    // Step 2: Get all activities for these WTRs
+    const activitiesQuery = `
+      SELECT 
+        dsl.coda_wtr_id,
+        dsl.coda_log_id,
+        dsl.activity_id,
+        dsl.project_id,
+        dsl.hours_submitted,
+        dsl.tech_report_description,
+        a.activity_name,
+        p.deal_name AS project_name,
+        p.service_line
+      FROM details_submission_logs dsl
+      LEFT JOIN activity a ON a.activity_id = dsl.activity_id
+      LEFT JOIN projects p ON p.project_id = dsl.project_id
+      WHERE dsl.coda_wtr_id = ANY($1)
+      ORDER BY dsl.coda_wtr_id, dsl.coda_log_id
+    `;
+
+    const wtrIds = wtrRows.map(row => row.coda_wtr_id);
+    const { rows: activityRows } = await client.query(activitiesQuery, [wtrIds]);
+    console.log(`✅ Fetched ${activityRows.length} activity records`);
+
+    // Step 3: Group activities by WTR ID
+    const activitiesMap = {};
+    activityRows.forEach(activity => {
+      const wtrId = activity.coda_wtr_id;
+      if (!activitiesMap[wtrId]) {
+        activitiesMap[wtrId] = [];
+      }
+      activitiesMap[wtrId].push({
+        coda_log_id: activity.coda_log_id,
+        activity_id: activity.activity_id,
+        activity_name: activity.activity_name,
+        project_id: activity.project_id,
+        project_name: activity.project_name,
+        service_line: activity.service_line,
+        hours_submitted: parseFloat(activity.hours_submitted) || 0,
+        tech_report_description: activity.tech_report_description
+      });
+    });
+
+    // Step 4: Combine WTR data with activities and calculate totals
+    const enrichedWTRs = wtrRows.map(wtr => {
+      const activities = activitiesMap[wtr.coda_wtr_id] || [];
+      const totalHours = activities.reduce((sum, activity) => sum + (activity.hours_submitted || 0), 0);
+      
+      return {
+        wtr_id: wtr.wtr_id,
+        coda_wtr_id: wtr.coda_wtr_id,
+        wtr_month: wtr.wtr_month,
+        wtr_year: wtr.wtr_year,
+        status: wtr.status || 'pending',
+        approval_status: wtr.status || 'pending', // For backward compatibility
+        employee_name: wtr.employee_name,
+        employee_nuid: wtr.employee_nuid,
+        employee_email: wtr.employee_email,
+        employee_title: wtr.employee_title,
+        department_name: wtr.department_name,
+        activities: activities,
+        total_submitted_hours: totalHours,
+        expected_hours: 160, // Standard expectation - could be made configurable
+        activity_count: activities.length
+      };
+    });
+
+    console.log(`✅ Returning ${enrichedWTRs.length} enriched WTR records`);
+    console.log('Sample enriched record:', JSON.stringify(enrichedWTRs[0], null, 2));
+    
+    res.json(enrichedWTRs);
   } catch (err) {
     console.error('❌ WTR query error:', err);
     res.status(500).json({
@@ -794,36 +853,69 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
-// API to update the status of a Work Time Record
+// FIXED: Update WTR status endpoint
 app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   const userEmail = req.user.employee_email;
+  
   console.log(`ℹ️ User ${userEmail} is attempting to update WTR ${id} to status: ${status}`);
 
   if (!id || !status) {
-    return res.status(400).json({ error: 'Missing ID or status' });
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing ID or status' 
+    });
+  }
+
+  // Validate status
+  const validStatuses = ['pending', 'approved', 'rejected'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({
+      success: false,
+      error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+    });
   }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const updateQuery = 'UPDATE work_time_records SET approval_status = $1 WHERE coda_wtr_id = $2 RETURNING *';
+    
+    // Use coda_wtr_id instead of a generic id field
+    const updateQuery = `
+      UPDATE work_time_records 
+      SET approval_status = $1, 
+          updated_at = NOW()
+      WHERE coda_wtr_id = $2 
+      RETURNING coda_wtr_id, wtr_month, wtr_year, approval_status
+    `;
+    
     const result = await client.query(updateQuery, [status, id]);
 
     if (result.rowCount > 0) {
       await client.query('COMMIT');
       console.log(`✅ Successfully updated WTR ${id} to status: ${status}`);
-      res.json({ message: 'Status updated successfully', record: result.rows[0] });
+      res.json({ 
+        success: true,
+        message: 'Status updated successfully', 
+        record: result.rows[0] 
+      });
     } else {
       await client.query('ROLLBACK');
       console.log(`⚠️ WTR ${id} not found.`);
-      res.status(404).json({ error: 'Record not found' });
+      res.status(404).json({ 
+        success: false,
+        error: 'Record not found' 
+      });
     }
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Error updating record:', err);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal server error', 
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Database error'
+    });
   } finally {
     client.release();
   }
@@ -834,7 +926,7 @@ const serveHtml = (fileName) => {
   return (req, res) => {
     try {
       let content = fs.readFileSync(path.join(__dirname, fileName), 'utf-8');
-      content = content.replace('${CLERK_PUBLISHABLE_KEY}', process.env.CLERK_PUBLISHABLE_KEY);
+      content = content.replace('${CLERK_PUBLISHABLE_KEY}', process.env.CLERK_PUBLISHABLE_KEY || '');
       res.setHeader('Content-Type', 'text/html');
       res.send(content);
     } catch (err) {
@@ -849,7 +941,7 @@ app.get('/', serveHtml('Sign in.html'));
 app.get('/sign-in', serveHtml('Sign in.html'));
 app.get('/dashboard', serveHtml('index.html'));
 
-// Serve static files (images, etc.)
+// Serve static files
 app.use(express.static(path.join(__dirname), {
   setHeaders: (res, path) => {
     if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg')) {
@@ -877,7 +969,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Handle graceful shutdown
+// Graceful shutdown
 const gracefulShutdown = () => {
   console.log('🛑 SIGTERM received, shutting down gracefully');
   pool.end(() => {
