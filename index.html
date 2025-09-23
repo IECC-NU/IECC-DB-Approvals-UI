@@ -398,8 +398,6 @@
       background: #f8fafc;
       border-radius: 10px;
       border: 1px solid #e5e7eb;
-      flex-direction: column;
-      align-items: flex-start;
     }
 
     .pagination-info {
@@ -412,9 +410,6 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-top: 10px;
-      width: 100%;
-      justify-content: space-between;
     }
 
     .rows-per-page label {
@@ -591,22 +586,22 @@
     </div>
 
     <!-- Pagination Controls -->
-    <div class="pagination-container" id="paginationControls" style="display: none; flex-direction: column; align-items: flex-start;">
-      <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
-        <span id="pageInfo">Page 1 of 1</span>
-        <div class="pagination-buttons">
-          <button class="btn btn-secondary" onclick="prevPage()" id="prevBtn">Previous</button>
-          <button class="btn btn-secondary" onclick="nextPage()" id="nextBtn">Next</button>
+    <div class="pagination-container" id="paginationControls" style="display: none;">
+      <div class="pagination-info">
+        <div class="rows-per-page">
+          <label for="rowsPerPage">Rows per page:</label>
+          <select id="rowsPerPage">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
         </div>
+        <span id="pageInfo">Page 1 of 1</span>
       </div>
-      <div class="rows-per-page" style="margin-top:10px;">
-        <label for="rowsPerPage">Rows per page:</label>
-        <select id="rowsPerPage">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="20">20</option>
-          <option value="50">50</option>
-        </select>
+      <div class="pagination-buttons">
+        <button class="btn btn-secondary" onclick="prevPage()" id="prevBtn">Previous</button>
+        <button class="btn btn-secondary" onclick="nextPage()" id="nextBtn">Next</button>
       </div>
     </div>
   </div>
@@ -852,7 +847,7 @@
 
       return activities.map(activity => `
         <div class="activity-item">
-          <strong>${activity.project_name || 'No Project'}</strong> <span style="color:#0072bc">(${activity.hours_submitted || 0}h)</span><br>
+          <strong>${activity.project_name || 'No Project'}</strong> (${activity.hours_submitted || 0}h)<br>
           <small><strong>Activity:</strong> ${activity.activity || ''}</small><br>
           <small><strong>Service Line:</strong> ${activity.service_line || 'No Service Line'}</small><br>
           <small><strong>Description:</strong> ${activity.tech_report_description || 'No description provided'}</small><br>
@@ -997,8 +992,14 @@
         console.log('Update result:', result);
 
         if (result.ok) {
-          // Always reload from server to sync UI with DB
-          await loadData();
+          // Update local data - use coda_wtr_id for matching
+          const recordIndex = wtrData.findIndex(r => String(r.coda_wtr_id) === String(wtrId));
+          if (recordIndex !== -1) {
+            wtrData[recordIndex].status = newStatus;
+            wtrData[recordIndex].approval_status = newStatus;
+          }
+
+          // Re-apply filters and update display
           applyFilters();
           updateStats();
           console.log(`Successfully updated WTR ${wtrId} to ${newStatus}`);
