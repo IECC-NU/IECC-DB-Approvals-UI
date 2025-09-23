@@ -26,7 +26,7 @@
     }
 
     .container {
-      max-width: 1400px;
+      max-width: 1600px;
       margin: 0 auto;
       background: rgba(255, 255, 255, 0.97);
       border-radius: 20px;
@@ -199,6 +199,102 @@
       padding: 14px 12px;
       color: #374151;
       font-size: .9rem;
+      vertical-align: top;
+    }
+
+    /* Activity Details Styling */
+    .activity-container {
+      max-width: 350px;
+    }
+
+    .activity-item {
+      margin-bottom: 12px;
+      padding: 12px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 4px solid #4f46e5;
+      position: relative;
+    }
+
+    .activity-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .project-name {
+      font-weight: 700;
+      color: #1e40af;
+      font-size: 1rem;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .activity-details {
+      font-size: 0.85rem;
+      color: #4b5563;
+      line-height: 1.4;
+    }
+
+    .activity-details div {
+      margin-bottom: 4px;
+    }
+
+    .activity-details strong {
+      color: #374151;
+      font-weight: 600;
+    }
+
+    .hours-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #3b82f6;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .employee-details {
+      font-weight: 600;
+      color: #004c8c;
+    }
+
+    .employee-details div {
+      margin-bottom: 4px;
+    }
+
+    .employee-details strong {
+      display: block;
+      font-size: 1rem;
+      margin-bottom: 2px;
+    }
+
+    .employee-details small {
+      font-size: 0.8rem;
+      color: #64748b;
+      font-weight: 400;
+    }
+
+    .hours-info {
+      font-weight: 500;
+      color: #0072bc;
+    }
+
+    .hours-info div {
+      margin-bottom: 4px;
+    }
+
+    .hours-info strong {
+      display: block;
+      font-size: 1rem;
+      margin-bottom: 2px;
+    }
+
+    .hours-info small {
+      font-size: 0.8rem;
+      color: #64748b;
+      font-weight: 400;
     }
 
     .status-pending {
@@ -296,33 +392,48 @@
     }
 
     .action-btn {
-      padding: 6px 12px;
+      padding: 8px 16px;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       font-weight: 600;
-      margin: 0 2px;
+      margin: 0 4px 4px 0;
+      transition: all 0.3s ease;
     }
 
     .approve-btn {
-      background: #16a34a;
+      background: linear-gradient(135deg, #16a34a, #15803d);
       color: white;
     }
 
     .reject-btn {
-      background: #dc2626;
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
       color: white;
     }
 
     .reset-btn {
-      background: #f59e0b;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
       color: white;
     }
 
     .action-btn:hover {
-      opacity: 0.8;
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .action-btn:disabled {
+      background: #d1d5db;
+      color: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
     }
 
     @media (max-width: 768px) {
@@ -341,6 +452,14 @@
 
       .topbar {
         justify-content: center;
+      }
+
+      .activity-container {
+        max-width: 250px;
+      }
+
+      .activity-item {
+        padding: 8px;
       }
     }
   </style>
@@ -450,6 +569,7 @@
             <th>Employee Info</th>
             <th>Period</th>
             <th>Hours</th>
+            <th>Activity Details</th>
             <th>Department</th>
             <th>Status</th>
             <th>Actions</th>
@@ -531,13 +651,13 @@
     async function initApp() {
       try {
         hideError();
-        console.log('🚀 Initializing application...');
+        console.log('Initializing application...');
 
         await waitForClerk();
         await window.Clerk.load();
 
         if (!window.Clerk.user) {
-          console.log('❌ User not authenticated, redirecting to sign-in');
+          console.log('User not authenticated, redirecting to sign-in');
           window.location.href = '/sign-in';
           return;
         }
@@ -555,7 +675,7 @@
           }
         };
 
-        console.log('✅ Authentication successful');
+        console.log('Authentication successful');
 
         // Load initial data
         await loadData();
@@ -567,10 +687,10 @@
         setupEventListeners();
 
         isInitialized = true;
-        console.log('✅ Application initialized successfully');
+        console.log('Application initialized successfully');
 
       } catch (error) {
-        console.error('❌ Initialization error:', error);
+        console.error('Initialization error:', error);
         showError(
           'Failed to initialize the application. Please refresh the page.',
           error.message
@@ -580,7 +700,7 @@
 
     // Load work time records
     async function loadData() {
-      console.log('📊 Loading work time records...');
+      console.log('Loading work time records...');
       document.getElementById('loading').classList.add('show');
 
       try {
@@ -588,7 +708,7 @@
         wtrData = await response.json();
         filteredData = [...wtrData];
 
-        console.log(`✅ Loaded ${wtrData.length} work time records`);
+        console.log(`Loaded ${wtrData.length} work time records`);
 
         if (wtrData.length === 0) {
           document.getElementById('noData').style.display = 'block';
@@ -597,7 +717,7 @@
         }
 
       } catch (error) {
-        console.error('❌ Failed to load work time records:', error);
+        console.error('Failed to load work time records:', error);
         showError('Failed to load work time records', error.message);
         wtrData = [];
         filteredData = [];
@@ -609,7 +729,7 @@
     // Load departments for filter
     async function populateDepartments() {
       try {
-        console.log('🏢 Loading departments...');
+        console.log('Loading departments...');
         const response = await authedFetch('/api/departments');
         const departments = await response.json();
 
@@ -623,10 +743,10 @@
           select.appendChild(option);
         });
 
-        console.log(`✅ Loaded ${departments.length} departments`);
+        console.log(`Loaded ${departments.length} departments`);
 
       } catch (error) {
-        console.error('❌ Failed to load departments:', error);
+        console.error('Failed to load departments:', error);
         showError('Failed to load departments', error.message);
       }
     }
@@ -674,14 +794,23 @@
       updateStats();
     }
 
-    // Render table data
+    // Helper function to get month name
+    function getMonthName(monthNumber) {
+      const months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      return months[monthNumber - 1] || monthNumber;
+    }
+
+    // Render table data with enhanced activity details
     function renderData() {
       const tbody = document.getElementById('dataTable');
 
       if (filteredData.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">
+            <td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">
               No records match your current filters
             </td>
           </tr>
@@ -692,23 +821,54 @@
       tbody.innerHTML = filteredData.map(record => `
         <tr data-id="${record.wtr_id}">
           <td>
-            <div><strong>${record.employee_name}</strong></div>
-            <div style="font-size: 0.8rem; color: #64748b;">${record.employee_email}</div>
+            <div class="employee-details">
+              <strong>${record.employee_name}</strong>
+              <div><small>NUID: ${record.employee_nuid}</small></div>
+              <div><small>${record.employee_email}</small></div>
+              <div><small>${record.employee_title || 'N/A'}</small></div>
+            </div>
           </td>
-          <td>${record.wtr_month}/${record.wtr_year}</td>
           <td>
-            <div>${record.total_submitted_hours}h submitted</div>
-            <div style="font-size: 0.8rem; color: #64748b;">${record.expected_hours}h expected</div>
+            <strong>${getMonthName(record.wtr_month)} ${record.wtr_year}</strong><br>
+            <small>WTR ID: ${record.coda_wtr_id || record.wtr_id}</small>
+          </td>
+          <td>
+            <div class="hours-info">
+              <strong>${record.total_submitted_hours}h submitted</strong>
+              <div><small>Expected: ${record.expected_hours}h</small></div>
+              <div><small>Variance: ${(record.total_submitted_hours - record.expected_hours).toFixed(1)}h</small></div>
+            </div>
+          </td>
+          <td>
+            <div class="activity-container">
+              ${record.activities && record.activities.length > 0
+          ? record.activities.map(activity => `
+                    <div class="activity-item">
+                      <div class="hours-badge">${activity.hours_submitted}h</div>
+                      <div class="project-name">${activity.project_name}</div>
+                      <div class="activity-details">
+                        <div><strong>Activity:</strong> ${activity.activity_name}</div>
+                        <div><strong>Service Line:</strong> ${activity.service_line}</div>
+                        <div><strong>Description:</strong> ${activity.tech_report_description || 'No description'}</div>
+                        <div><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id}</div>
+                      </div>
+                    </div>
+                  `).join('')
+          : '<div style="color: #64748b; font-style: italic;">No activity details available</div>'
+        }
+            </div>
           </td>
           <td>${record.department_name || 'Unassigned'}</td>
           <td><span class="status-${record.status}">${record.status.charAt(0).toUpperCase() + record.status.slice(1)}</span></td>
           <td>
-            ${record.status === 'pending' ? `
-              <button class="action-btn approve-btn" onclick="updateStatus(${record.wtr_id}, 'approved')">Approve</button>
-              <button class="action-btn reject-btn" onclick="updateStatus(${record.wtr_id}, 'rejected')">Reject</button>
-            ` : `
-              <button class="action-btn reset-btn" onclick="updateStatus(${record.wtr_id}, 'pending')">Reset</button>
-            `}
+            <div class="action-buttons">
+              ${record.status === 'pending' ? `
+                <button class="action-btn approve-btn" onclick="updateStatus(${record.wtr_id}, 'approved')">Approve</button>
+                <button class="action-btn reject-btn" onclick="updateStatus(${record.wtr_id}, 'rejected')">Reject</button>
+              ` : `
+                <button class="action-btn reset-btn" onclick="updateStatus(${record.wtr_id}, 'pending')">Reset</button>
+              `}
+            </div>
           </td>
         </tr>
       `).join('');
@@ -739,13 +899,13 @@
           // Re-apply filters and update display
           applyFilters();
 
-          console.log(`✅ Updated WTR ${wtrId} to ${newStatus}`);
+          console.log(`Updated WTR ${wtrId} to ${newStatus}`);
         } else {
           throw new Error(result.error || 'Update failed');
         }
 
       } catch (error) {
-        console.error('❌ Status update failed:', error);
+        console.error('Status update failed:', error);
         showError(`Failed to update status: ${error.message}`);
 
         // Reset button
