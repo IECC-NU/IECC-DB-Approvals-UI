@@ -745,7 +745,7 @@ app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
-// Enhanced WTR endpoint with activity details
+// Enhanced WTR endpoint to include activity details
 app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -836,7 +836,7 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
 
   const client = await pool.connect();
   try {
-    console.log(`📝 Updating WTR ${id} status to ${normalizedStatus}`);
+    console.log(`🔄 Updating WTR ${id} status to ${normalizedStatus}`);
 
     const { rowCount } = await client.query(
       `UPDATE work_time_records 
@@ -936,6 +936,6 @@ process.on('SIGINT', gracefulShutdown);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);
-  console.log(`🔐 Sign in: http://localhost:${PORT}/sign-in`);
+  console.log(`🔑 Sign in: http://localhost:${PORT}/sign-in`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
