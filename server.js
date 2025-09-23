@@ -786,11 +786,13 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
     // Step 1: Get main WTR data with employee and department info
     const wtrQuery = `
       SELECT 
-        wtr.coda_wtr_id as wtr_id,
-        wtr.coda_wtr_id,
+        wtr.wtr_id,
+        COALESCE(wtr.coda_wtr_id, CAST(wtr.wtr_id AS VARCHAR)) as coda_wtr_id,
         wtr.wtr_month,
         wtr.wtr_year,
         wtr.approval_status as status,
+        wtr.total_submitted_hours,
+        wtr.expected_hours,
         e.employee_name,
         e.employee_nuid,
         e.employee_email,
@@ -801,6 +803,8 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
       LEFT JOIN department AS d ON d.department_id = e.department_id
       ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
     `;
+    
+    console.log('🔍 Executing WTR query...');
 
     let wtrRows = [];
     try {
@@ -841,7 +845,7 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
     // Step 2: Get all activities for these WTRs
     const activitiesQuery = `
       SELECT 
-        dsl.coda_wtr_id,
+        COALESCE(dsl.coda_wtr_id, CAST(wtr.wtr_id AS VARCHAR)) as coda_wtr_id,
         dsl.coda_log_id,
         dsl.activity_id,
         dsl.project_id,
@@ -850,14 +854,15 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
         a.activity_name,
         p.deal_name AS project_name,
         p.service_line
-      FROM details_submission_logs dsl
+      FROM work_time_records wtr
+      LEFT JOIN details_submission_logs dsl ON dsl.coda_wtr_id = CAST(COALESCE(wtr.coda_wtr_id, wtr.wtr_id::text) AS VARCHAR)
       LEFT JOIN activity a ON a.activity_id = dsl.activity_id
       LEFT JOIN projects p ON p.project_id = dsl.project_id
-      WHERE dsl.coda_wtr_id = ANY($1)
+      WHERE wtr.wtr_id = ANY($1)
       ORDER BY dsl.coda_wtr_id, dsl.coda_log_id
     `;
 
-    const wtrIds = wtrRows.map(row => row.coda_wtr_id).filter(v => v !== null && v !== undefined);
+    const wtrIds = wtrRows.map(row => row.wtr_id).filter(v => v !== null && v !== undefined);
     let activityRows = [];
     if (wtrIds.length > 0) {
       try {
