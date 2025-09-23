@@ -451,8 +451,7 @@
 //   console.log(`🔐 Sign in: http://localhost:${PORT}/sign-in`);
 //   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 // });
-
-// // server.js - Updated email extraction and auth handling
+// server.js - Complete updated file with aggregated WTR queries
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -570,7 +569,7 @@ async function getUserFromClerk(userId) {
 function requireAuthWithDbCheck(req, res, next) {
   return requireAuth()(req, res, async () => {
     try {
-      console.log('🔐 Auth check starting...');
+      console.log('🔍 Auth check starting...');
       console.log('Auth object keys:', Object.keys(req.auth || {}));
       console.log('Session claims:', req.auth?.sessionClaims);
 
@@ -676,7 +675,7 @@ app.get('/api/debug/dbinfo', async (req, res) => {
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = 'public' 
-        AND table_name IN ('work_time_records', 'authentication', 'employee', 'department')
+        AND table_name IN ('work_time_records', 'authentication', 'employee', 'department', 'details_submission_logs', 'projects', 'activity')
       `);
 
       const tableNames = tables.map(t => t.table_name);
@@ -745,32 +744,96 @@ app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
+// Updated WTR endpoint with aggregated activities
 app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   const client = await pool.connect();
   try {
-    console.log('📊 Fetching work time records...');
+    console.log('📊 Fetching work time records with aggregated activities...');
 
-    const { rows } = await client.query(`
+    // First, get the basic WTR data with employee info
+    const wtrQuery = `
       SELECT 
         wtr.coda_wtr_id,
+        wtr.wtr_id,
         wtr.wtr_month,
         wtr.wtr_year,
         wtr.approval_status,
-        dsl.hours_submitted,
+        wtr.total_submitted_hours,
+        wtr.expected_hours,
+        e.employee_nuid,
         e.employee_name,
-        d.department_name,
-        p.deal_name AS project_name,
-        a.activity_name AS activity
+        e.employee_email,
+        e.employee_title,
+        COALESCE(d.department_name, 'Unassigned') as department_name
       FROM work_time_records AS wtr
       JOIN employee AS e ON e.employee_nuid = wtr.employee_nuid
       LEFT JOIN department AS d ON d.department_id = e.department_id
-      LEFT JOIN details_submission_logs dsl ON dsl.coda_wtr_id = wtr.coda_wtr_id
-      LEFT JOIN projects AS p ON p.project_id = dsl.project_id
-      LEFT JOIN activity AS a ON a.activity_id = dsl.activity_id
-    `);
+      ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
+    `;
 
-    console.log(`✅ Fetched ${rows.length} work time records`);
-    res.json(rows);
+    const { rows: wtrRows } = await client.query(wtrQuery);
+
+    // Then get all activities for each WTR
+    const activitiesQuery = `
+      SELECT 
+        dsl.coda_wtr_id,
+        dsl.coda_log_id,
+        dsl.activity_id,
+        dsl.project_id,
+        dsl.hours_submitted,
+        dsl.tech_report_description,
+        a.activity_name,
+        p.deal_name AS project_name,
+        p.service_line
+      FROM details_submission_logs dsl
+      LEFT JOIN activity a ON a.activity_id = dsl.activity_id
+      LEFT JOIN projects p ON p.project_id = dsl.project_id
+      WHERE dsl.coda_wtr_id = ANY($1)
+      ORDER BY dsl.coda_wtr_id, dsl.coda_log_id
+    `;
+
+    const wtrIds = wtrRows.map(row => row.coda_wtr_id);
+    const { rows: activityRows } = wtrIds.length > 0 ? await client.query(activitiesQuery, [wtrIds]) : { rows: [] };
+
+    // Group activities by WTR ID
+    const activitiesByWtr = {};
+    activityRows.forEach(activity => {
+      if (!activitiesByWtr[activity.coda_wtr_id]) {
+        activitiesByWtr[activity.coda_wtr_id] = [];
+      }
+      activitiesByWtr[activity.coda_wtr_id].push({
+        coda_log_id: activity.coda_log_id,
+        activity_id: activity.activity_id,
+        activity_name: activity.activity_name,
+        project_id: activity.project_id,
+        project_name: activity.project_name,
+        service_line: activity.service_line,
+        hours_submitted: parseFloat(activity.hours_submitted) || 0,
+        tech_report_description: activity.tech_report_description
+      });
+    });
+
+    // Combine WTR data with activities
+    const combinedData = wtrRows.map(wtr => ({
+      ...wtr,
+      activities: activitiesByWtr[wtr.coda_wtr_id] || [],
+      // Ensure hours are numbers
+      total_submitted_hours: parseFloat(wtr.total_submitted_hours) || 0,
+      expected_hours: parseFloat(wtr.expected_hours) || 0
+    }));
+
+    console.log(`✅ Fetched ${combinedData.length} work time records with activities`);
+    
+    // Log sample for debugging
+    if (combinedData.length > 0) {
+      console.log('Sample record:', {
+        id: combinedData[0].coda_wtr_id,
+        activities_count: combinedData[0].activities.length,
+        total_hours: combinedData[0].total_submitted_hours
+      });
+    }
+
+    res.json(combinedData);
   } catch (err) {
     console.error('❌ WTR query error:', err);
     res.status(500).json({
@@ -782,27 +845,46 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
-// API to update the status of a Work Time Record
+// Updated status update endpoint - use coda_wtr_id
 app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   const userEmail = req.user.employee_email;
+  
   console.log(`ℹ️ User ${userEmail} is attempting to update WTR ${id} to status: ${status}`);
 
   if (!id || !status) {
     return res.status(400).json({ error: 'Missing ID or status' });
   }
 
+  const allowed = new Set(['pending', 'approved', 'rejected']);
+  const normalizedStatus = String(status).toLowerCase();
+
+  if (!allowed.has(normalizedStatus)) {
+    return res.status(400).json({
+      error: 'Invalid status',
+      allowed: Array.from(allowed)
+    });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const updateQuery = 'UPDATE work_time_records SET approval_status = $1 WHERE coda_wtr_id = $2 RETURNING *';
-    const result = await client.query(updateQuery, [status, id]);
+    
+    // Update using coda_wtr_id
+    const updateQuery = `
+      UPDATE work_time_records 
+      SET approval_status = $1, updated_at = CURRENT_TIMESTAMP 
+      WHERE coda_wtr_id = $2 
+      RETURNING *
+    `;
+    
+    const result = await client.query(updateQuery, [normalizedStatus, id]);
 
     if (result.rowCount > 0) {
       await client.query('COMMIT');
-      console.log(`✅ Successfully updated WTR ${id} to status: ${status}`);
-      res.json({ message: 'Status updated successfully', record: result.rows[0] });
+      console.log(`✅ Successfully updated WTR ${id} to status: ${normalizedStatus}`);
+      res.json({ success: true, updated: result.rowCount, record: result.rows[0] });
     } else {
       await client.query('ROLLBACK');
       console.log(`⚠️ WTR ${id} not found.`);
@@ -811,23 +893,31 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Error updating record:', err);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Database error' 
+    });
   } finally {
     client.release();
   }
 });
 
+/* ------------------------ HTML / Static ------------------------ */
 // Serve HTML files
 const serveHtml = (fileName) => {
   return (req, res) => {
     try {
       let content = fs.readFileSync(path.join(__dirname, fileName), 'utf-8');
-      content = content.replace('${CLERK_PUBLISHABLE_KEY}', process.env.CLERK_PUBLISHABLE_KEY);
+      content = content.replace('${CLERK_PUBLISHABLE_KEY}', process.env.CLERK_PUBLISHABLE_KEY || '');
       res.setHeader('Content-Type', 'text/html');
       res.send(content);
     } catch (err) {
       console.error(`❌ Error serving ${fileName}:`, err);
-      res.status(500).send('Internal Server Error');
+      res.status(500).send(`
+        <h1>Server Error</h1>
+        <p>Could not load ${fileName}</p>
+        <p>Make sure the file exists in the project root.</p>
+      `);
     }
   };
 };
@@ -875,10 +965,12 @@ const gracefulShutdown = () => {
 };
 
 process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`🔗 Local URL: http://localhost:${PORT}`);
-  }
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);
+  console.log(`🔐 Sign in: http://localhost:${PORT}/sign-in`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
