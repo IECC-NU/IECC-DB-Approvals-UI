@@ -138,12 +138,19 @@
       flex-shrink: 0;
     }
 
+    .btn:disabled {
+      background: #d1d5db;
+      color: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     .btn-primary {
       background: linear-gradient(135deg, #0072bc, #004c8c);
       color: white;
     }
 
-    .btn-primary:hover {
+    .btn-primary:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 10px 20px rgba(0, 76, 140, 0.3);
     }
@@ -162,8 +169,8 @@
       font-size: 0.9rem;
     }
 
-    .btn-success:hover,
-    .btn-danger:hover {
+    .btn-success:hover:not(:disabled),
+    .btn-danger:hover:not(:disabled) {
       transform: translateY(-1px);
       box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
     }
@@ -175,16 +182,9 @@
       font-size: 0.9rem;
     }
 
-    .btn-secondary:hover {
+    .btn-secondary:hover:not(:disabled) {
       background: #4b5563;
       transform: translateY(-1px);
-    }
-
-    .btn-secondary:disabled {
-      background: #d1d5db;
-      color: #9ca3af;
-      cursor: not-allowed;
-      transform: none;
     }
 
     .stats {
@@ -297,6 +297,33 @@
     .hours-info {
       font-weight: 500;
       color: #0072bc;
+    }
+
+    .activity-item {
+      margin-bottom: 8px;
+      padding: 8px;
+      background: #f8fafc;
+      border-radius: 6px;
+      border-left: 3px solid #4f46e5;
+    }
+
+    .activity-item strong {
+      color: #1e40af;
+    }
+
+    .activity-item small {
+      color: #6b7280;
+      display: block;
+      margin-top: 2px;
+    }
+
+    .no-activities {
+      color: #64748b;
+      font-style: italic;
+      padding: 8px;
+      background: #f9fafb;
+      border-radius: 6px;
+      border: 1px dashed #d1d5db;
     }
 
     /* Add vertical separators between table columns*/
@@ -708,6 +735,7 @@
         filteredData = [...wtrData];
 
         console.log(`Loaded ${wtrData.length} work time records`);
+        console.log('Sample record:', wtrData[0]);
 
         if (wtrData.length === 0) {
           document.getElementById('noData').style.display = 'block';
@@ -759,7 +787,7 @@
       const searchFilter = document.getElementById('searchEmployee').value.toLowerCase();
 
       filteredData = wtrData.filter(record => {
-        // Normalize status - check both 'status' and 'approval_status' fields
+        // Use the correct status field
         const recordStatus = record.status || record.approval_status || 'pending';
 
         // Status filter
@@ -806,6 +834,28 @@
       return months[monthNumber - 1] || monthNumber;
     }
 
+    // Render activities HTML
+    function renderActivities(activities) {
+      if (!activities || !Array.isArray(activities) || activities.length === 0) {
+        return `
+          <div class="no-activities">
+            <strong>No activity details available</strong><br>
+            <small>This record may be missing activity data or the activities haven't been loaded yet.</small>
+          </div>
+        `;
+      }
+
+      return activities.map(activity => `
+        <div class="activity-item">
+          <strong>${activity.activity_name || 'Unnamed Activity'}</strong> (${activity.hours_submitted || 0}h)<br>
+          <small><strong>Project:</strong> ${activity.project_name || 'No Project'}</small><br>
+          <small><strong>Service Line:</strong> ${activity.service_line || 'No Service Line'}</small><br>
+          <small><strong>Description:</strong> ${activity.tech_report_description || 'No description provided'}</small><br>
+          <small><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id || 'N/A'}</small>
+        </div>
+      `).join('');
+    }
+
     // Render table data with pagination and full activity details
     function renderData() {
       const tbody = document.getElementById('dataTable');
@@ -832,68 +882,61 @@
       const end = start + rowsPerPage;
       const paginatedData = filteredData.slice(start, end);
 
-      tbody.innerHTML = paginatedData.map(record => `
-        <tr data-id="${record.wtr_id}">
-          <td>
-            <div class="employee-details">
-              <strong>${record.employee_name}</strong><br>
-              <small>NUID: ${record.employee_nuid}</small><br>
-              <small>${record.employee_email}</small><br>
-              <small>${record.employee_title || 'N/A'}</small><br>
-              <small><em>${record.department_name || 'Unassigned'}</em></small>
-            </div>
-          </td>
-          <td>
-            <strong>${getMonthName(record.wtr_month)} ${record.wtr_year}</strong><br>
-            <small>WTR ID: ${record.coda_wtr_id || record.wtr_id}</small>
-          </td>
-          <td>
-            <div class="hours-info">
-              <strong>Submitted: ${record.total_submitted_hours}h</strong><br>
-              <small>Expected: ${record.expected_hours}h</small><br>
-              <small>Variance: ${(record.total_submitted_hours - record.expected_hours).toFixed(2)}h</small>
-            </div>
-          </td>
-          <td>
-            <div style="max-width: 300px;">
-              ${record.activities && Array.isArray(record.activities) && record.activities.length > 0
-          ? record.activities.map(activity => `
-                    <div style="margin-bottom: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #4f46e5;">
-                      <strong>${activity.activity_name || 'Unnamed Activity'}</strong> (${activity.hours_submitted || 0}h)<br>
-                      <small><strong>Project:</strong> ${activity.project_name || 'No Project'}</small><br>
-                      <small><strong>Service Line:</strong> ${activity.service_line || 'No Service Line'}</small><br>
-                      <small><strong>Description:</strong> ${activity.tech_report_description || 'No description provided'}</small><br>
-                      <small><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id || 'N/A'}</small>
-                    </div>
-                  `).join('')
-          : `<div style="color: #64748b; font-style: italic; padding: 8px; background: #f9fafb; border-radius: 6px; border: 1px dashed #d1d5db;">
-               <strong>No activity details available</strong><br>
-               <small>This record may be missing activity data or the activities haven't been loaded yet.</small>
-             </div>`
-        }
-            </div>
-          </td>
-          <td>
-            <span class="status-${record.status || record.approval_status || 'pending'}">${(record.status || record.approval_status || 'pending').toUpperCase()}</span>
-          </td>
-          <td>
-            <div class="action-buttons">
-              ${(record.status === 'pending' || record.approval_status === 'pending') ? `
-                <button class="btn btn-success" onclick="updateStatus(${record.wtr_id}, 'approved')">
-                  Approve
-                </button>
-                <button class="btn btn-danger" onclick="updateStatus(${record.wtr_id}, 'rejected')">
-                  Reject
-                </button>
-              ` : `
-                <button class="btn btn-primary" onclick="updateStatus(${record.wtr_id}, 'pending')" style="font-size: 0.8rem; padding: 6px 12px;">
-                  Reset to Pending
-                </button>
-              `}
-            </div>
-          </td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = paginatedData.map(record => {
+        const recordStatus = record.status || record.approval_status || 'pending';
+        const totalHours = record.total_submitted_hours || 0;
+        const expectedHours = record.expected_hours || 160;
+        const variance = totalHours - expectedHours;
+
+        return `
+          <tr data-id="${record.wtr_id}">
+            <td>
+              <div class="employee-details">
+                <strong>${record.employee_name}</strong><br>
+                <small>NUID: ${record.employee_nuid}</small><br>
+                <small>${record.employee_email}</small><br>
+                <small>${record.employee_title || 'N/A'}</small><br>
+                <small><em>${record.department_name || 'Unassigned'}</em></small>
+              </div>
+            </td>
+            <td>
+              <strong>${getMonthName(record.wtr_month)} ${record.wtr_year}</strong><br>
+              <small>WTR ID: ${record.coda_wtr_id || record.wtr_id}</small>
+            </td>
+            <td>
+              <div class="hours-info">
+                <strong>Submitted: ${totalHours}h</strong><br>
+                <small>Expected: ${expectedHours}h</small><br>
+                <small>Variance: ${variance.toFixed(2)}h</small>
+              </div>
+            </td>
+            <td>
+              <div style="max-width: 300px;">
+                ${renderActivities(record.activities)}
+              </div>
+            </td>
+            <td>
+              <span class="status-${recordStatus}">${recordStatus.toUpperCase()}</span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                ${recordStatus === 'pending' ? `
+                  <button class="btn btn-success" onclick="updateStatus(${record.wtr_id}, 'approved')">
+                    Approve
+                  </button>
+                  <button class="btn btn-danger" onclick="updateStatus(${record.wtr_id}, 'rejected')">
+                    Reject
+                  </button>
+                ` : `
+                  <button class="btn btn-primary" onclick="updateStatus(${record.wtr_id}, 'pending')" style="font-size: 0.8rem; padding: 6px 12px;">
+                    Reset to Pending
+                  </button>
+                `}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
 
       // Show pagination if needed
       if (filteredData.length > rowsPerPage || currentPage > 1) {
@@ -938,25 +981,27 @@
         button.textContent = 'Updating...';
         button.disabled = true;
 
+        console.log(`Updating WTR ${wtrId} to status: ${newStatus}`);
+
         const response = await authedFetch(`/api/wtr/${wtrId}/status`, {
           method: 'PUT',
           body: JSON.stringify({ status: newStatus })
         });
 
         const result = await response.json();
+        console.log('Update result:', result);
 
         if (result.success) {
-          // Update local data - handle both field names
+          // Update local data
           const recordIndex = wtrData.findIndex(r => r.wtr_id === wtrId);
           if (recordIndex !== -1) {
             wtrData[recordIndex].status = newStatus;
-            wtrData[recordIndex].approval_status = newStatus; // Update both fields
+            wtrData[recordIndex].approval_status = newStatus;
           }
 
           // Re-apply filters and update display
           applyFilters();
-
-          console.log(`Updated WTR ${wtrId} to ${newStatus}`);
+          console.log(`Successfully updated WTR ${wtrId} to ${newStatus}`);
         } else {
           throw new Error(result.error || 'Update failed');
         }
@@ -967,8 +1012,10 @@
 
         // Reset button
         const button = event.target;
-        button.textContent = originalText;
-        button.disabled = false;
+        if (button) {
+          button.textContent = originalText;
+          button.disabled = false;
+        }
       }
     }
 
@@ -1054,7 +1101,7 @@
       }
     }
 
-    // Make updateStatus available globally
+    // Make functions available globally
     window.updateStatus = updateStatus;
     window.prevPage = prevPage;
     window.nextPage = nextPage;
