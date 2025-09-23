@@ -458,7 +458,13 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { clerkMiddleware, requireAuth } = require('@clerk/express');
+let clerkMiddleware, requireAuth;
+try {
+  ({ clerkMiddleware, requireAuth } = require('@clerk/express'));
+} catch (err) {
+  // Clerk may not be installed in local dev; we'll conditionally enable auth below
+  console.warn('Clerk not available; running with conditional auth.');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -471,7 +477,13 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-app.use(clerkMiddleware());
+// Support a development bypass for auth. Set DISABLE_AUTH=true to skip Clerk
+const DISABLE_AUTH = String(process.env.DISABLE_AUTH || '').toLowerCase() === 'true';
+if (!DISABLE_AUTH && typeof clerkMiddleware === 'function') {
+  app.use(clerkMiddleware());
+} else {
+  console.log('⚠️ Authentication is disabled (DISABLE_AUTH=true). Using development user from env if provided.');
+}
 
 /* ---------------------------- PostgreSQL ---------------------------- */
 const must = (name) => {
