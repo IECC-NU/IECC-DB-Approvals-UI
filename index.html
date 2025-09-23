@@ -592,13 +592,19 @@
       const headers = new Headers(options.headers || {});
       headers.set('Content-Type', 'application/json');
 
+      // Try Clerk token first (if app still uses Clerk), otherwise fall back to localStorage token
       try {
-        const token = await window.Clerk?.session?.getToken?.();
-        if (token) {
-          headers.set('Authorization', `Bearer ${token}`);
+        const clerkToken = await window.Clerk?.session?.getToken?.();
+        if (clerkToken) {
+          headers.set('Authorization', `Bearer ${clerkToken}`);
+        } else {
+          const localToken = localStorage.getItem('token');
+          if (localToken) headers.set('Authorization', `Bearer ${localToken}`);
         }
       } catch (err) {
-        console.warn('Could not get Clerk token:', err);
+        // fallback to localStorage token
+        const localToken = localStorage.getItem('token');
+        if (localToken) headers.set('Authorization', `Bearer ${localToken}`);
       }
 
       const response = await fetch(url, {
@@ -704,7 +710,32 @@
 
       try {
         const response = await authedFetch('/api/wtr');
-        wtrData = await response.json();
+        const raw = await response.json();
+
+        // Normalize and coerce fields
+        wtrData = raw.map(r => {
+          const record = Object.assign({}, r);
+          record.wtr_id = Number(record.wtr_id);
+          record.wtr_month = Number(record.wtr_month);
+          record.wtr_year = Number(record.wtr_year);
+          record.total_submitted_hours = Number(record.total_submitted_hours) || 0;
+          record.expected_hours = Number(record.expected_hours) || 0;
+          // Normalize status field
+          record.status = (record.status || record.approval_status || 'pending')?.toLowerCase();
+
+          // Try to ensure activities is an array
+          if (!record.activities) {
+            // Some backends may provide activities as JSON string
+            if (typeof record.activities_raw === 'string') {
+              try { record.activities = JSON.parse(record.activities_raw); } catch (e) { record.activities = []; }
+            } else {
+              record.activities = [];
+            }
+          }
+
+          return record;
+        });
+
         filteredData = [...wtrData];
 
         console.log(`Loaded ${wtrData.length} work time records`);
@@ -828,72 +859,98 @@
       noDataDiv.style.display = 'none';
 
       // Calculate pagination
-      const start = (currentPage - 1) * rowsPerPage;
-      const end = start + rowsPerPage;
-      const paginatedData = filteredData.slice(start, end);
+      // Group by employee name for a clearer view
+      const grouped = {};
+      filteredData.forEach(r => {
+        const key = (r.employee_name || r.employee_email || 'Unknown').trim();
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(r);
+      });
 
-      tbody.innerHTML = paginatedData.map(record => `
-        <tr data-id="${record.wtr_id}">
-          <td>
-            <div class="employee-details">
-              <strong>${record.employee_name}</strong><br>
-              <small>NUID: ${record.employee_nuid}</small><br>
-              <small>${record.employee_email}</small><br>
-              <small>${record.employee_title || 'N/A'}</small><br>
-              <small><em>${record.department_name || 'Unassigned'}</em></small>
-            </div>
-          </td>
-          <td>
-            <strong>${getMonthName(record.wtr_month)} ${record.wtr_year}</strong><br>
-            <small>WTR ID: ${record.coda_wtr_id || record.wtr_id}</small>
-          </td>
-          <td>
-            <div class="hours-info">
-              <strong>Submitted: ${record.total_submitted_hours}h</strong><br>
-              <small>Expected: ${record.expected_hours}h</small><br>
-              <small>Variance: ${(record.total_submitted_hours - record.expected_hours).toFixed(2)}h</small>
-            </div>
-          </td>
-          <td>
-            <div style="max-width: 300px;">
-              ${record.activities && Array.isArray(record.activities) && record.activities.length > 0
-          ? record.activities.map(activity => `
-                    <div style="margin-bottom: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #4f46e5;">
-                      <strong>${activity.activity_name || 'Unnamed Activity'}</strong> (${activity.hours_submitted || 0}h)<br>
-                      <small><strong>Project:</strong> ${activity.project_name || 'No Project'}</small><br>
-                      <small><strong>Service Line:</strong> ${activity.service_line || 'No Service Line'}</small><br>
-                      <small><strong>Description:</strong> ${activity.tech_report_description || 'No description provided'}</small><br>
-                      <small><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id || 'N/A'}</small>
-                    </div>
-                  `).join('')
-          : `<div style="color: #64748b; font-style: italic; padding: 8px; background: #f9fafb; border-radius: 6px; border: 1px dashed #d1d5db;">
-               <strong>No activity details available</strong><br>
-               <small>This record may be missing activity data or the activities haven't been loaded yet.</small>
-             </div>`
-        }
-            </div>
-          </td>
-          <td>
-            <span class="status-${record.status || record.approval_status || 'pending'}">${(record.status || record.approval_status || 'pending').toUpperCase()}</span>
-          </td>
-          <td>
-            <div class="action-buttons">
-              ${(record.status === 'pending' || record.approval_status === 'pending') ? `
-                <button class="btn btn-success" onclick="updateStatus(${record.wtr_id}, 'approved')">
-                  Approve
-                </button>
-                <button class="btn btn-danger" onclick="updateStatus(${record.wtr_id}, 'rejected')">
-                  Reject
-                </button>
-              ` : `
-                <button class="btn btn-primary" onclick="updateStatus(${record.wtr_id}, 'pending')" style="font-size: 0.8rem; padding: 6px 12px;">
-                  Reset to Pending
-                </button>
-              `}
-            </div>
-          </td>
-        </tr>
-      `).join('');
+      // Paging groups rather than individual records
+      const groupKeys = Object.keys(grouped).sort();
+      const startGroup = (currentPage - 1) * rowsPerPage;
+      const endGroup = startGroup + rowsPerPage;
+      const paginatedGroupKeys = groupKeys.slice(startGroup, endGroup);
+
+      tbody.innerHTML = paginatedGroupKeys.map(emp => {
+        const records = grouped[emp];
+        const totalSubmitted = records.reduce((s, x) => s + (Number(x.total_submitted_hours) || 0), 0);
+        const totalExpected = records.reduce((s, x) => s + (Number(x.expected_hours) || 0), 0);
+
+        // Build rows: a summary row per employee and expandable details row
+        const summaryRow = `
+          <tr class="employee-summary" data-employee="${emp}">
+            <td>
+              <div class="employee-details">
+                <strong>${emp}</strong><br>
+                <small>NUID: ${records[0].employee_nuid || 'N/A'}</small><br>
+                <small>${records[0].employee_email || ''}</small><br>
+                <small>${records[0].employee_title || 'N/A'}</small><br>
+                <small><em>${records[0].department_name || 'Unassigned'}</em></small>
+              </div>
+            </td>
+            <td>
+              <div class="hours-info">
+                <strong>Total Submitted: ${totalSubmitted}h</strong><br>
+                <small>Total Expected: ${totalExpected}h</small><br>
+                <small>Variance: ${(totalSubmitted - totalExpected).toFixed(2)}h</small>
+              </div>
+            </td>
+            <td colspan="3">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <button class="btn btn-secondary" onclick="toggleDetails('${emp.replace(/'/g,'\\\'')}')">Toggle Details</button>
+                <span style="color:#64748b; font-size:0.9rem;">${records.length} WTR(s)</span>
+              </div>
+            </td>
+            <td>
+              <!-- empty for action column on summary -->
+            </td>
+          </tr>
+        `;
+
+        const detailRows = records.map(record => `
+          <tr class="employee-detail employee-detail-${emp}" data-id="${record.wtr_id}" style="display:none;">
+            <td style="min-width:260px;">
+              <div>
+                <strong>${getMonthName(record.wtr_month)} ${record.wtr_year}</strong><br>
+                <small>WTR ID: ${record.coda_wtr_id || record.wtr_id}</small>
+              </div>
+            </td>
+            <td style="min-width:200px;">
+              <div class="hours-info">
+                <strong>Submitted: ${record.total_submitted_hours}h</strong><br>
+                <small>Expected: ${record.expected_hours}h</small><br>
+                <small>Variance: ${(record.total_submitted_hours - record.expected_hours).toFixed(2)}h</small>
+              </div>
+            </td>
+            <td style="max-width:400px;">
+              ${record.activities && record.activities.length > 0 ? record.activities.map(a => `
+                <div style="margin-bottom:8px;padding:8px;background:#f8fafc;border-radius:6px;border-left:3px solid #4f46e5;">
+                  <strong>${a.activity_name || 'Unnamed Activity'}</strong> (${a.hours_submitted || 0}h)<br>
+                  <small><strong>Project:</strong> ${a.project_name || 'No Project'}</small><br>
+                  <small><strong>Description:</strong> ${a.tech_report_description || 'No description'}</small>
+                </div>
+              `).join('') : `<div style="color:#64748b;font-style:italic;padding:8px;">No activities</div>`}
+            </td>
+            <td>
+              <span class="status-${record.status}">${(record.status || 'pending').toUpperCase()}</span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                ${record.status === 'pending' ? `
+                  <button class="btn btn-success" onclick="updateStatus(event, ${record.wtr_id}, 'approved')">Approve</button>
+                  <button class="btn btn-danger" onclick="updateStatus(event, ${record.wtr_id}, 'rejected')">Reject</button>
+                ` : `
+                  <button class="btn btn-primary" onclick="updateStatus(event, ${record.wtr_id}, 'pending')">Reset to Pending</button>
+                `}
+              </div>
+            </td>
+          </tr>
+        `).join('');
+
+        return summaryRow + detailRows;
+      }).join('');
 
       // Show pagination if needed
       if (filteredData.length > rowsPerPage || currentPage > 1) {
@@ -931,21 +988,24 @@
     }
 
     // Update record status
-    async function updateStatus(wtrId, newStatus) {
+    async function updateStatus(event, wtrId, newStatus) {
+      const button = event?.target;
+      const originalText = button?.textContent;
       try {
-        const button = event.target;
-        const originalText = button.textContent;
-        button.textContent = 'Updating...';
-        button.disabled = true;
+        if (button) {
+          button.textContent = 'Updating...';
+          button.disabled = true;
+        }
 
         const response = await authedFetch(`/api/wtr/${wtrId}/status`, {
           method: 'PUT',
           body: JSON.stringify({ status: newStatus })
         });
 
+        // pages/api/wtr/[id]/status.js returns { ok: true } on success
         const result = await response.json();
 
-        if (result.success) {
+        if (result.ok) {
           // Update local data - handle both field names
           const recordIndex = wtrData.findIndex(r => r.wtr_id === wtrId);
           if (recordIndex !== -1) {
@@ -955,6 +1015,7 @@
 
           // Re-apply filters and update display
           applyFilters();
+          updateStats();
 
           console.log(`Updated WTR ${wtrId} to ${newStatus}`);
         } else {
@@ -964,11 +1025,11 @@
       } catch (error) {
         console.error('Status update failed:', error);
         showError(`Failed to update status: ${error.message}`);
-
-        // Reset button
-        const button = event.target;
-        button.textContent = originalText;
-        button.disabled = false;
+      } finally {
+        if (button) {
+          button.textContent = originalText;
+          button.disabled = false;
+        }
       }
     }
 
