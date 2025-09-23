@@ -4,504 +4,1067 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IECC Work Time Records</title>
+  <title>IECC WTR Manager Dashboard</title>
+
+  <!-- Clerk (latest) -->
+  <script async crossorigin="anonymous" data-clerk-publishable-key="${CLERK_PUBLISHABLE_KEY}"
+    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
+    </script>
+
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background-color: #f9f9f9;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0072bc 0%, #004c8c 100%);
+      min-height: 100vh;
+      padding: 20px;
     }
 
-    header {
-      margin-bottom: 20px;
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.97);
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(10px);
     }
 
-    h1 {
-      color: #007bff;
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .header img {
+      max-height: 70px;
+      margin-bottom: 15px;
+    }
+
+    .header h1 {
+      font-size: 2.3rem;
+      font-weight: bold;
+      color: #004c8c;
       margin-bottom: 10px;
     }
 
-    p {
-      color: #666;
-      margin-bottom: 20px;
+    .header p {
+      font-size: 1.1rem;
+      color: #0072bc;
+      font-weight: 500;
     }
 
-    .filters {
+    .topbar {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
+      align-items: center;
       margin-bottom: 20px;
+      gap: 12px;
       flex-wrap: wrap;
     }
 
-    .filters div {
-      margin-right: 10px;
-      margin-bottom: 10px;
+    .chip {
+      font-size: .9rem;
+      color: #004c8c;
+      background: #e6f1fb;
+      border: 1px solid #cfe7ff;
+      padding: 8px 12px;
+      border-radius: 999px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 30px;
+      flex-wrap: nowrap;
+      align-items: center;
+      border-top: 1px solid #e0e0e0;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 10px 0;
+      overflow-x: auto;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-right: 20px;
+      margin-right: 20px;
+      border-right: 1px solid #ccc;
+      flex-shrink: 0;
+    }
+
+    .control-group:last-of-type {
+      border-right: none;
+      margin-right: 0;
+      padding-right: 0;
+    }
+
+    .control-group label {
+      font-weight: 600;
+      color: #004c8c;
+      font-size: 0.9rem;
     }
 
     select,
     input {
-      padding: 5px;
-      width: 150px;
+      padding: 12px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      min-width: 150px;
     }
 
-    button {
-      padding: 5px 10px;
-      background-color: #007bff;
-      color: white;
+    select:focus,
+    input:focus {
+      outline: none;
+      border-color: #0072bc;
+      box-shadow: 0 0 0 3px rgba(0, 114, 188, 0.15);
+    }
+
+    .btn {
+      padding: 12px 24px;
       border: none;
+      border-radius: 10px;
+      font-weight: 600;
       cursor: pointer;
-      margin-right: 5px;
+      transition: all 0.3s ease;
+      font-size: 1rem;
+      flex-shrink: 0;
     }
 
-    button:hover {
-      background-color: #0056b3;
+    .btn-primary {
+      background: linear-gradient(135deg, #0072bc, #004c8c);
+      color: white;
     }
 
-    .stats-grid {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(0, 76, 140, 0.3);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #16a34a, #15803d);
+      color: white;
+      padding: 8px 16px;
+      font-size: 0.9rem;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      color: white;
+      padding: 8px 16px;
+      font-size: 0.9rem;
+    }
+
+    .btn-success:hover,
+    .btn-danger:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+      padding: 8px 16px;
+      font-size: 0.9rem;
+    }
+
+    .btn-secondary:hover {
+      background: #4b5563;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary:disabled {
+      background: #d1d5db;
+      color: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
     }
 
     .stat-card {
-      background: #f0f0f0;
-      padding: 10px;
+      background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+      padding: 20px;
+      border-radius: 15px;
       text-align: center;
-      width: 20%;
-      border-radius: 5px;
-      margin-bottom: 10px;
+      border: 1px solid #bae6fd;
     }
 
-    .stat-number {
-      font-size: 1.2em;
+    .stat-card h3 {
+      font-size: 2rem;
       font-weight: bold;
+      color: #004c8c;
+      margin-bottom: 5px;
     }
 
-    .stat-label {
-      color: #666;
+    .stat-card p {
+      color: #0369a1;
+      font-weight: 500;
+    }
+
+    .table-container {
+      background: white;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+      border: 1px solid #e5e7eb;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
     }
 
-    th,
-    td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: left;
+    thead {
+      background: linear-gradient(135deg, #0072bc, #004c8c);
     }
 
-    th {
-      background: #007bff;
+    thead th {
       color: white;
+      padding: 16px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
-    .pagination {
+    tbody tr {
+      transition: all 0.3s ease;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    tbody tr:hover {
+      background: #f0f9ff;
+      transform: scale(1.01);
+    }
+
+    tbody td {
+      padding: 14px 12px;
+      color: #374151;
+      font-size: 0.9rem;
+    }
+
+    .status-pending {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-approved {
+      background: linear-gradient(135deg, #16a34a, #15803d);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-rejected {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .action-buttons {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 10px;
+      gap: 8px;
+    }
+
+    .employee-details {
+      font-weight: 600;
+      color: #004c8c;
+    }
+
+    .hours-info {
+      font-weight: 500;
+      color: #0072bc;
+    }
+
+    /* Add vertical separators between table columns*/
+    table td {
+      box-shadow: inset -1px 0 0 #e5e7eb;
+    }
+
+    table th {
+      border-right: 1px solid #e5e7eb;
+    }
+
+    table td:last-child,
+    table th:last-child {
+      border-right: none;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      color: #64748b;
+      font-size: 1.1rem;
+    }
+
+    .loading.show {
+      display: block;
     }
 
     .error {
-      color: red;
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 20px;
+      border-radius: 10px;
+      margin: 20px 0;
+    }
+
+    .error h3 {
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .error details {
       margin-top: 10px;
+      font-size: 0.9rem;
+    }
+
+    .debug-info {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 10px 0;
+      font-family: monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+    }
+
+    .no-data {
+      text-align: center;
+      padding: 40px;
+      color: #64748b;
+      font-size: 1.1rem;
+    }
+
+    .pagination-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .pagination-info {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .rows-per-page {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .rows-per-page label {
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.9rem;
+    }
+
+    .rows-per-page select {
+      padding: 6px 10px;
+      min-width: 80px;
+      font-size: 0.9rem;
+    }
+
+    .pagination-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    #pageInfo {
+      font-weight: 500;
+      color: #374151;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: wrap;
+      }
+
+      .control-group {
+        border-right: none;
+        margin-right: 0;
+        padding-right: 0;
+        margin-bottom: 10px;
+      }
+
+      .container {
+        padding: 20px;
+      }
+
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      .table-container {
+        overflow-x: auto;
+      }
+
+      .topbar {
+        justify-content: center;
+      }
     }
   </style>
 </head>
 
 <body>
-  <header>
-    Loading user... <button>Sign Out</button>
-  </header>
-
-  <h1>IECC Work Time Records</h1>
-  <p>Approve and manage employee work time submissions</p>
-
-  <div class="filters">
-    <div>
-      Filter by Status
-      <select id="status-filter">
-        <option>All Status</option>
-        <option>Pending</option>
-        <option>Approved</option>
-        <option>Rejected</option>
-      </select>
+  <div class="container">
+    <div class="topbar">
+      <span id="userDisplay" class="chip">Loading user...</span>
+      <button class="btn btn-secondary" id="signOutBtn">Sign Out</button>
     </div>
 
-    <div>
-      Filter by Department
-      <select id="dept-filter">
-        <option>All Departments</option>
-        <!-- Departments will be populated dynamically -->
-      </select>
+    <div class="header">
+      <img src="IECC Logo.png" alt="IECC Logo" onerror="this.style.display='none'">
+      <h1>IECC Work Time Records</h1>
+      <p>Approve and manage employee work time submissions</p>
     </div>
 
-    <div>
-      Filter by Month
-      <select id="month-filter">
-        <option>All Months</option>
-        <option>January</option>
-        <option>February</option>
-        <option>March</option>
-        <option>April</option>
-        <option>May</option>
-        <option>June</option>
-        <option>July</option>
-        <option>August</option>
-        <option>September</option>
-        <option>October</option>
-        <option>November</option>
-        <option>December</option>
-      </select>
+    <!-- Error Display -->
+    <div id="errorContainer" style="display: none;"></div>
+
+    <!-- Filters -->
+    <div class="controls">
+      <div class="control-group">
+        <label>Filter by Status</label>
+        <select id="statusFilter">
+          <option value="all">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Filter by Department</label>
+        <select id="departmentFilter">
+          <option value="all">All Departments</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Filter by Month</label>
+        <select id="monthFilter">
+          <option value="all">All Months</option>
+          <option value="1">January</option>
+          <option value="2">February</option>
+          <option value="3">March</option>
+          <option value="4">April</option>
+          <option value="5">May</option>
+          <option value="6">June</option>
+          <option value="7">July</option>
+          <option value="8">August</option>
+          <option value="9">September</option>
+          <option value="10">October</option>
+          <option value="11">November</option>
+          <option value="12">December</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Filter by Year</label>
+        <select id="yearFilter">
+          <option value="all">All Years</option>
+          <option value="2024">2024</option>
+          <option value="2025">2025</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Search Employee</label>
+        <input type="text" id="searchEmployee" placeholder="Search by name or email">
+      </div>
+
+      <button class="btn btn-primary" id="refreshBtn">Refresh Data</button>
+      <button class="btn btn-secondary" id="debugBtn">Debug Info</button>
     </div>
 
-    <div>
-      Filter by Year
-      <select id="year-filter">
-        <option>All Years</option>
-        <option>2024</option>
-        <option>2025</option>
-        <!-- Add more years if needed -->
-      </select>
+    <!-- KPIs -->
+    <div class="stats" id="statsContainer">
+      <div class="stat-card">
+        <h3 id="totalRecords">0</h3>
+        <p>Total Records</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="pendingRecords">0</h3>
+        <p>Pending Approval</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="approvedRecords">0</h3>
+        <p>Approved</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="rejectedRecords">0</h3>
+        <p>Rejected</p>
+      </div>
     </div>
 
-    <div>
-      Search Employee
-      <input id="search-input" placeholder="Search by name or email">
+    <div class="loading" id="loading">
+      <p>Loading data...</p>
     </div>
 
-    <button id="refresh-btn">Refresh Data</button>
-    <button id="debug-btn">Debug Info</button>
+    <!-- Table -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Employee Info</th>
+            <th>Period</th>
+            <th>Hours</th>
+            <th>Activity Details</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="dataTable"></tbody>
+      </table>
+    </div>
+
+    <div class="no-data" id="noData" style="display:none;">
+      <p>No work time records found.</p>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-container" id="paginationControls" style="display: none;">
+      <div class="pagination-info">
+        <div class="rows-per-page">
+          <label for="rowsPerPage">Rows per page:</label>
+          <select id="rowsPerPage">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+        <span id="pageInfo">Page 1 of 1</span>
+      </div>
+      <div class="pagination-buttons">
+        <button class="btn btn-secondary" onclick="prevPage()" id="prevBtn">Previous</button>
+        <button class="btn btn-secondary" onclick="nextPage()" id="nextBtn">Next</button>
+      </div>
+    </div>
   </div>
-
-  <div class="stats-grid">
-    <div class="stat-card">
-      <span class="stat-number" id="total-records">0</span>
-      <span class="stat-label">Total Records</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-number" id="pending-count">0</span>
-      <span class="stat-label">Pending Approval</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-number" id="approved-count">0</span>
-      <span class="stat-label">Approved</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-number" id="rejected-count">0</span>
-      <span class="stat-label">Rejected</span>
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>EMPLOYEE INFO</th>
-        <th>PERIOD</th>
-        <th>HOURS</th>
-        <th>ACTIVITY DETAILS</th>
-        <th>STATUS</th>
-        <th>ACTIONS</th>
-      </tr>
-    </thead>
-    <tbody id="records-body">
-      <tr>
-        <td colspan="6">Loading data...</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="pagination">
-    Rows per page: <select id="rows-per-page">
-      <option>1</option>
-      <option>2</option>
-      <option>3</option>
-      <option>4</option>
-      <option>5</option>
-      <option>6</option>
-      <option>7</option>
-      <option>8</option>
-      <option>9</option>
-      <option>10</option>
-      <option>11</option>
-      <option>12</option>
-      <option>13</option>
-      <option>14</option>
-      <option>15</option>
-      <option>16</option>
-      <option>17</option>
-      <option>18</option>
-      <option>19</option>
-      <option>20</option>
-      <option>21</option>
-      <option>22</option>
-      <option>23</option>
-      <option>24</option>
-      <option>25</option>
-      <option>26</option>
-      <option>27</option>
-      <option>28</option>
-      <option>29</option>
-      <option>30</option>
-      <option>31</option>
-      <option>32</option>
-      <option>33</option>
-      <option>34</option>
-      <option>35</option>
-      <option>36</option>
-      <option>37</option>
-      <option>38</option>
-      <option>39</option>
-      <option>40</option>
-      <option>41</option>
-      <option>42</option>
-      <option>43</option>
-      <option>44</option>
-      <option>45</option>
-      <option>46</option>
-      <option>47</option>
-      <option>48</option>
-      <option>49</option>
-      <option>50</option>
-    </select>
-    Page <span id="current-page">1</span> of <span id="total-pages">1</span>
-    <button id="prev-btn">Previous</button>
-    <button id="next-btn">Next</button>
-  </div>
-
-  <div id="error-message" class="error"></div>
 
   <script>
-    let allData = [];
+    let wtrData = [], filteredData = [];
+    let isInitialized = false;
+
+    // Pagination variables
     let currentPage = 1;
     let rowsPerPage = 10;
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      await loadDepartments();
-      await loadData();
-      setupEventListeners();
+    // Enhanced fetch with better error handling
+    async function authedFetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+      headers.set('Content-Type', 'application/json');
+
+      try {
+        const token = await window.Clerk?.session?.getToken?.();
+        if (token) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+      } catch (err) {
+        console.warn('Could not get Clerk token:', err);
+      }
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+      }
+
+      return response;
+    }
+
+    // Error display helper
+    function showError(message, details = null) {
+      const container = document.getElementById('errorContainer');
+      container.innerHTML = `
+        <div class="error">
+          <h3>Error</h3>
+          <p>${message}</p>
+          ${details ? `<details><summary>Technical Details</summary><div class="debug-info">${details}</div></details>` : ''}
+        </div>
+      `;
+      container.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('errorContainer').style.display = 'none';
+    }
+
+    // Wait for Clerk to load
+    const waitForClerk = () => new Promise((resolve, reject) => {
+      const start = Date.now();
+      const checkInterval = setInterval(() => {
+        if (window.Clerk && typeof window.Clerk.load === 'function') {
+          clearInterval(checkInterval);
+          resolve();
+        } else if (Date.now() - start > 15000) {
+          clearInterval(checkInterval);
+          reject(new Error('Clerk SDK failed to load within 15 seconds'));
+        }
+      }, 100);
     });
 
-    async function loadDepartments() {
+    // Initialize the application
+    async function initApp() {
       try {
-        const res = await fetch('/api/departments', { credentials: 'include' });
-        if (!res.ok) throw new Error('Failed to fetch departments');
-        const depts = await res.json();
-        const deptSelect = document.getElementById('dept-filter');
-        depts.forEach(d => {
-          const opt = document.createElement('option');
-          opt.value = d.department_name;
-          opt.textContent = d.department_name;
-          deptSelect.appendChild(opt);
-        });
-      } catch (e) {
-        showError('Failed to load departments: ' + e.message);
-      }
-    }
+        hideError();
+        console.log('Initializing application...');
 
-    async function loadData() {
-      try {
-        const res = await fetch('/api/wtr', { credentials: 'include' });
-        if (!res.ok) {
-          if (res.status === 403) {
+        await waitForClerk();
+        await window.Clerk.load();
+
+        if (!window.Clerk.user) {
+          console.log('User not authenticated, redirecting to sign-in');
+          window.location.href = '/sign-in';
+          return;
+        }
+
+        const user = window.Clerk.user;
+        const userEmail = user.primaryEmailAddress?.emailAddress || 'Signed in';
+        document.getElementById('userDisplay').textContent = userEmail;
+
+        document.getElementById('signOutBtn').onclick = async () => {
+          try {
+            await window.Clerk.signOut();
             window.location.href = '/sign-in';
-            return;
+          } catch (err) {
+            console.error('Sign out error:', err);
           }
-          throw new Error(res.statusText);
-        }
-        allData = await res.json();
-        refreshTable();
-      } catch (e) {
-        showError('Failed to load data: ' + e.message);
-      }
-    }
+        };
 
-    function setupEventListeners() {
-      document.getElementById('status-filter').addEventListener('change', () => { currentPage = 1; refreshTable(); });
-      document.getElementById('dept-filter').addEventListener('change', () => { currentPage = 1; refreshTable(); });
-      document.getElementById('month-filter').addEventListener('change', () => { currentPage = 1; refreshTable(); });
-      document.getElementById('year-filter').addEventListener('change', () => { currentPage = 1; refreshTable(); });
-      document.getElementById('search-input').addEventListener('input', () => { currentPage = 1; refreshTable(); });
-      document.getElementById('refresh-btn').addEventListener('click', loadData);
-      document.getElementById('debug-btn').addEventListener('click', async () => {
-        try {
-          const res = await fetch('/api/debug/dbinfo', { credentials: 'include' });
-          const debugData = await res.json();
-          console.log(debugData);
-          alert('Check console for debug info');
-        } catch (e) {
-          showError('Failed to get debug info');
-        }
-      });
-      document.getElementById('rows-per-page').addEventListener('change', (e) => {
-        rowsPerPage = parseInt(e.target.value);
-        currentPage = 1;
-        refreshTable();
-      });
-      document.getElementById('prev-btn').addEventListener('click', () => {
-        if (currentPage > 1) {
-          currentPage--;
-          refreshTable();
-        }
-      });
-      document.getElementById('next-btn').addEventListener('click', () => {
-        const totalPages = Math.ceil(getFilteredData().length / rowsPerPage);
-        if (currentPage < totalPages) {
-          currentPage++;
-          refreshTable();
-        }
-      });
-    }
+        console.log('Authentication successful');
 
-    function getFilteredData() {
-      const statusFilter = document.getElementById('status-filter').value.toLowerCase();
-      const deptFilter = document.getElementById('dept-filter').value;
-      const monthFilter = document.getElementById('month-filter').value;
-      const yearFilter = document.getElementById('year-filter').value;
-      const search = document.getElementById('search-input').value.toLowerCase();
+        // Load initial data
+        await loadData();
+        await populateDepartments();
+        applyFilters();
+        updateStats();
 
-      let filtered = allData;
+        // Set up event listeners
+        setupEventListeners();
 
-      if (statusFilter !== 'all status') {
-        filtered = filtered.filter(r => r.status.toLowerCase() === statusFilter);
-      }
-      if (deptFilter !== 'All Departments') {
-        filtered = filtered.filter(r => r.department_name === deptFilter);
-      }
-      if (monthFilter !== 'All Months') {
-        const monthNum = monthNames.indexOf(monthFilter) + 1;
-        filtered = filtered.filter(r => r.wtr_month === monthNum);
-      }
-      if (yearFilter !== 'All Years') {
-        filtered = filtered.filter(r => r.wtr_year === parseInt(yearFilter));
-      }
-      if (search) {
-        filtered = filtered.filter(r =>
-          r.employee_name.toLowerCase().includes(search) ||
-          r.employee_email.toLowerCase().includes(search)
+        isInitialized = true;
+        console.log('Application initialized successfully');
+
+      } catch (error) {
+        console.error('Initialization error:', error);
+        showError(
+          'Failed to initialize the application. Please refresh the page.',
+          error.message
         );
       }
-
-      return filtered;
     }
 
-    function refreshTable() {
-      const filtered = getFilteredData();
-      const tbody = document.getElementById('records-body');
-      tbody.innerHTML = '';
-      if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6">No work time records found. Please check your database connection or add some data.</td></tr>';
-      } else {
-        const start = (currentPage - 1) * rowsPerPage;
-        const end = start + rowsPerPage;
-        const pageData = filtered.slice(start, end);
+    // Load work time records
+    async function loadData() {
+      console.log('Loading work time records...');
+      document.getElementById('loading').classList.add('show');
 
-        pageData.forEach(record => {
-          const row = document.createElement('tr');
-
-          // Employee Info
-          const employeeTd = document.createElement('td');
-          employeeTd.innerHTML = `${record.employee_name}<br>NUID: ${record.employee_nuid}<br>${record.employee_email}<br>${record.employee_title}<br>${record.department_name}`;
-          row.appendChild(employeeTd);
-
-          // Period
-          const periodTd = document.createElement('td');
-          periodTd.innerHTML = `${monthNames[record.wtr_month - 1]} ${record.wtr_year}<br>WTR ID: ${record.coda_wtr_id}`;
-          row.appendChild(periodTd);
-
-          // Hours
-          const hoursTd = document.createElement('td');
-          const variance = record.expected_hours - record.total_submitted_hours;
-          hoursTd.innerHTML = `Submitted: ${record.total_submitted_hours.toFixed(2)}h<br>Expected: ${record.expected_hours.toFixed(2)}h<br>Variance: ${variance.toFixed(2)}h`;
-          row.appendChild(hoursTd);
-
-          // Activity Details
-          const activityTd = document.createElement('td');
-          if (record.activities.length === 0) {
-            activityTd.textContent = 'No activity details available. This record may be missing activity data or the activities haven\'t been loaded yet.';
-          } else {
-            const ul = document.createElement('ul');
-            record.activities.forEach(act => {
-              const li = document.createElement('li');
-              li.innerHTML = `${act.activity_name}: ${act.hours_submitted.toFixed(2)}h<br>Project: ${act.project_name || 'N/A'}<br>Service Line: ${act.service_line || 'N/A'}<br>Description: ${act.tech_report_description || 'N/A'}`;
-              ul.appendChild(li);
-            });
-            activityTd.appendChild(ul);
-          }
-          row.appendChild(activityTd);
-
-          // Status
-          const statusTd = document.createElement('td');
-          statusTd.textContent = record.status.toUpperCase();
-          row.appendChild(statusTd);
-
-          // Actions
-          const actionsTd = document.createElement('td');
-          if (record.status.toLowerCase() === 'pending') {
-            const approveBtn = document.createElement('button');
-            approveBtn.textContent = 'Approve';
-            approveBtn.onclick = () => updateStatus(record.wtr_id, 'approved');
-            actionsTd.appendChild(approveBtn);
-
-            const rejectBtn = document.createElement('button');
-            rejectBtn.textContent = 'Reject';
-            rejectBtn.onclick = () => updateStatus(record.wtr_id, 'rejected');
-            actionsTd.appendChild(rejectBtn);
-          } else {
-            const resetBtn = document.createElement('button');
-            resetBtn.textContent = 'Reset to Pending';
-            resetBtn.onclick = () => updateStatus(record.wtr_id, 'pending');
-            actionsTd.appendChild(resetBtn);
-          }
-          row.appendChild(actionsTd);
-
-          tbody.appendChild(row);
-        });
-      }
-
-      // Update stats
-      const total = filtered.length;
-      const pending = filtered.filter(r => r.status.toLowerCase() === 'pending').length;
-      const approved = filtered.filter(r => r.status.toLowerCase() === 'approved').length;
-      const rejected = filtered.filter(r => r.status.toLowerCase() === 'rejected').length;
-
-      document.getElementById('total-records').textContent = total;
-      document.getElementById('pending-count').textContent = pending;
-      document.getElementById('approved-count').textContent = approved;
-      document.getElementById('rejected-count').textContent = rejected;
-
-      // Update pagination
-      const totalPages = Math.ceil(filtered.length / rowsPerPage);
-      document.getElementById('current-page').textContent = currentPage;
-      document.getElementById('total-pages').textContent = totalPages;
-      document.getElementById('prev-btn').disabled = currentPage === 1;
-      document.getElementById('next-btn').disabled = currentPage === totalPages;
-    }
-
-    async function updateStatus(id, status) {
       try {
-        const res = await fetch(`/api/wtr/${id}/status`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-          credentials: 'include'
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to update status`);
-        await loadData(); // Refresh data after update
-      } catch (e) {
-        showError(e.message);
+        const response = await authedFetch('/api/wtr');
+        wtrData = await response.json();
+        filteredData = [...wtrData];
+
+        console.log(`Loaded ${wtrData.length} work time records`);
+
+        if (wtrData.length === 0) {
+          document.getElementById('noData').style.display = 'block';
+        } else {
+          document.getElementById('noData').style.display = 'none';
+        }
+
+      } catch (error) {
+        console.error('Failed to load work time records:', error);
+        showError('Failed to load work time records', error.message);
+        wtrData = [];
+        filteredData = [];
+      } finally {
+        document.getElementById('loading').classList.remove('show');
       }
     }
 
-    function showError(message) {
-      document.getElementById('error-message').textContent = message;
+    // Load departments for filter
+    async function populateDepartments() {
+      try {
+        console.log('Loading departments...');
+        const response = await authedFetch('/api/departments');
+        const departments = await response.json();
+
+        const select = document.getElementById('departmentFilter');
+        select.innerHTML = '<option value="all">All Departments</option>';
+
+        departments.forEach(dept => {
+          const option = document.createElement('option');
+          option.value = dept.department_name;
+          option.textContent = dept.department_name;
+          select.appendChild(option);
+        });
+
+        console.log(`Loaded ${departments.length} departments`);
+
+      } catch (error) {
+        console.error('Failed to load departments:', error);
+        showError('Failed to load departments', error.message);
+      }
     }
+
+    // Apply filters to data
+    function applyFilters() {
+      const statusFilter = document.getElementById('statusFilter').value;
+      const departmentFilter = document.getElementById('departmentFilter').value;
+      const monthFilter = document.getElementById('monthFilter').value;
+      const yearFilter = document.getElementById('yearFilter').value;
+      const searchFilter = document.getElementById('searchEmployee').value.toLowerCase();
+
+      filteredData = wtrData.filter(record => {
+        // Normalize status - check both 'status' and 'approval_status' fields
+        const recordStatus = record.status || record.approval_status || 'pending';
+
+        // Status filter
+        if (statusFilter !== 'all' && recordStatus !== statusFilter) {
+          return false;
+        }
+
+        // Department filter
+        if (departmentFilter !== 'all' && record.department_name !== departmentFilter) {
+          return false;
+        }
+
+        // Month filter
+        if (monthFilter !== 'all' && record.wtr_month != monthFilter) {
+          return false;
+        }
+
+        // Year filter
+        if (yearFilter !== 'all' && record.wtr_year != yearFilter) {
+          return false;
+        }
+
+        // Search filter
+        if (searchFilter &&
+          !record.employee_name.toLowerCase().includes(searchFilter) &&
+          !record.employee_email.toLowerCase().includes(searchFilter)) {
+          return false;
+        }
+
+        return true;
+      });
+
+      currentPage = 1; // Reset to first page when filters change
+      renderData();
+      updateStats();
+    }
+
+    // Helper function to get month name
+    function getMonthName(monthNumber) {
+      const months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      return months[monthNumber - 1] || monthNumber;
+    }
+
+    // Render table data with pagination and full activity details
+    function renderData() {
+      const tbody = document.getElementById('dataTable');
+      const noDataDiv = document.getElementById('noData');
+      const paginationControls = document.getElementById('paginationControls');
+
+      if (filteredData.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">
+              No records match your current filters
+            </td>
+          </tr>
+        `;
+        noDataDiv.style.display = 'block';
+        paginationControls.style.display = 'none';
+        return;
+      }
+
+      noDataDiv.style.display = 'none';
+
+      // Calculate pagination
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const paginatedData = filteredData.slice(start, end);
+
+      tbody.innerHTML = paginatedData.map(record => `
+        <tr data-id="${record.wtr_id}">
+          <td>
+            <div class="employee-details">
+              <strong>${record.employee_name}</strong><br>
+              <small>NUID: ${record.employee_nuid}</small><br>
+              <small>${record.employee_email}</small><br>
+              <small>${record.employee_title || 'N/A'}</small><br>
+              <small><em>${record.department_name || 'Unassigned'}</em></small>
+            </div>
+          </td>
+          <td>
+            <strong>${getMonthName(record.wtr_month)} ${record.wtr_year}</strong><br>
+            <small>WTR ID: ${record.coda_wtr_id || record.wtr_id}</small>
+          </td>
+          <td>
+            <div class="hours-info">
+              <strong>Submitted: ${record.total_submitted_hours}h</strong><br>
+              <small>Expected: ${record.expected_hours}h</small><br>
+              <small>Variance: ${(record.total_submitted_hours - record.expected_hours).toFixed(2)}h</small>
+            </div>
+          </td>
+          <td>
+            <div style="max-width: 300px;">
+              ${record.activities && Array.isArray(record.activities) && record.activities.length > 0
+          ? record.activities.map(activity => `
+                    <div style="margin-bottom: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #4f46e5;">
+                      <strong>${activity.activity_name || 'Unnamed Activity'}</strong> (${activity.hours_submitted || 0}h)<br>
+                      <small><strong>Project:</strong> ${activity.project_name || 'No Project'}</small><br>
+                      <small><strong>Service Line:</strong> ${activity.service_line || 'No Service Line'}</small><br>
+                      <small><strong>Description:</strong> ${activity.tech_report_description || 'No description provided'}</small><br>
+                      <small><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id || 'N/A'}</small>
+                    </div>
+                  `).join('')
+          : `<div style="color: #64748b; font-style: italic; padding: 8px; background: #f9fafb; border-radius: 6px; border: 1px dashed #d1d5db;">
+               <strong>No activity details available</strong><br>
+               <small>This record may be missing activity data or the activities haven't been loaded yet.</small>
+             </div>`
+        }
+            </div>
+          </td>
+          <td>
+            <span class="status-${record.status || record.approval_status || 'pending'}">${(record.status || record.approval_status || 'pending').toUpperCase()}</span>
+          </td>
+          <td>
+            <div class="action-buttons">
+              ${(record.status === 'pending' || record.approval_status === 'pending') ? `
+                <button class="btn btn-success" onclick="updateStatus(${record.wtr_id}, 'approved')">
+                  Approve
+                </button>
+                <button class="btn btn-danger" onclick="updateStatus(${record.wtr_id}, 'rejected')">
+                  Reject
+                </button>
+              ` : `
+                <button class="btn btn-primary" onclick="updateStatus(${record.wtr_id}, 'pending')" style="font-size: 0.8rem; padding: 6px 12px;">
+                  Reset to Pending
+                </button>
+              `}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+
+      // Show pagination if needed
+      if (filteredData.length > rowsPerPage || currentPage > 1) {
+        paginationControls.style.display = 'flex';
+        updatePaginationControls();
+      } else {
+        paginationControls.style.display = 'none';
+      }
+    }
+
+    function updatePaginationControls() {
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      const startRecord = (currentPage - 1) * rowsPerPage + 1;
+      const endRecord = Math.min(currentPage * rowsPerPage, filteredData.length);
+
+      document.getElementById('pageInfo').textContent =
+        `Showing ${startRecord}-${endRecord} of ${filteredData.length} records (Page ${currentPage} of ${totalPages})`;
+      document.getElementById('prevBtn').disabled = currentPage === 1;
+      document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages === 0;
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderData();
+      }
+    }
+
+    function nextPage() {
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderData();
+      }
+    }
+
+    // Update record status
+    async function updateStatus(wtrId, newStatus) {
+      try {
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = 'Updating...';
+        button.disabled = true;
+
+        const response = await authedFetch(`/api/wtr/${wtrId}/status`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: newStatus })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // Update local data - handle both field names
+          const recordIndex = wtrData.findIndex(r => r.wtr_id === wtrId);
+          if (recordIndex !== -1) {
+            wtrData[recordIndex].status = newStatus;
+            wtrData[recordIndex].approval_status = newStatus; // Update both fields
+          }
+
+          // Re-apply filters and update display
+          applyFilters();
+
+          console.log(`Updated WTR ${wtrId} to ${newStatus}`);
+        } else {
+          throw new Error(result.error || 'Update failed');
+        }
+
+      } catch (error) {
+        console.error('Status update failed:', error);
+        showError(`Failed to update status: ${error.message}`);
+
+        // Reset button
+        const button = event.target;
+        button.textContent = originalText;
+        button.disabled = false;
+      }
+    }
+
+    // Update statistics
+    function updateStats() {
+      const total = filteredData.length;
+      const pending = filteredData.filter(r => (r.status || r.approval_status || 'pending') === 'pending').length;
+      const approved = filteredData.filter(r => (r.status || r.approval_status) === 'approved').length;
+      const rejected = filteredData.filter(r => (r.status || r.approval_status) === 'rejected').length;
+
+      document.getElementById('totalRecords').textContent = total;
+      document.getElementById('pendingRecords').textContent = pending;
+      document.getElementById('approvedRecords').textContent = approved;
+      document.getElementById('rejectedRecords').textContent = rejected;
+    }
+
+    // Set up event listeners
+    function setupEventListeners() {
+      // Filter change events
+      ['statusFilter', 'departmentFilter', 'monthFilter', 'yearFilter'].forEach(id => {
+        document.getElementById(id).addEventListener('change', applyFilters);
+      });
+
+      // Search input with debounce
+      let searchTimeout;
+      document.getElementById('searchEmployee').addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(applyFilters, 300);
+      });
+
+      // Refresh button
+      document.getElementById('refreshBtn').addEventListener('click', async () => {
+        await loadData();
+        await populateDepartments();
+        applyFilters();
+      });
+
+      // Debug button
+      document.getElementById('debugBtn').addEventListener('click', showDebugInfo);
+
+      // Pagination controls
+      const rowsSelector = document.getElementById('rowsPerPage');
+      if (rowsSelector) {
+        rowsSelector.addEventListener('change', function () {
+          rowsPerPage = parseInt(this.value);
+          currentPage = 1;
+          renderData();
+        });
+      }
+    }
+
+    // Show debug information
+    async function showDebugInfo() {
+      try {
+        const [healthResponse, dbInfoResponse] = await Promise.all([
+          authedFetch('/api/health'),
+          authedFetch('/api/debug/dbinfo')
+        ]);
+
+        const health = await healthResponse.json();
+        const dbInfo = await dbInfoResponse.json();
+
+        const debugInfo = {
+          timestamp: new Date().toISOString(),
+          health,
+          database: dbInfo,
+          localData: {
+            totalRecords: wtrData.length,
+            filteredRecords: filteredData.length,
+            sampleRecord: wtrData[0] || 'No records'
+          },
+          clerk: {
+            loaded: !!window.Clerk,
+            authenticated: !!window.Clerk?.user,
+            userEmail: window.Clerk?.user?.primaryEmailAddress?.emailAddress
+          }
+        };
+
+        showError('Debug Information', JSON.stringify(debugInfo, null, 2));
+
+      } catch (error) {
+        showError('Debug failed', error.message);
+      }
+    }
+
+    // Make updateStatus available globally
+    window.updateStatus = updateStatus;
+    window.prevPage = prevPage;
+    window.nextPage = nextPage;
+
+    // Start the application
+    initApp().catch(error => {
+      console.error('Fatal initialization error:', error);
+      showError('Application failed to start', error.message);
+    });
+
   </script>
 </body>
 
