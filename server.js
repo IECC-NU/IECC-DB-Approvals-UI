@@ -1,164 +1,52 @@
 // // server.js - Updated email extraction and auth handling
 // const express = require('express');
-// const { Pool } = require('pg');
-// const cors = require('cors');
-// const path = require('path');
-// const fs = require('fs');
-// const { clerkMiddleware, requireAuth } = require('@clerk/express');
+app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    console.log('📊 Fetching WTRs from v_wtr_with_details view...');
+    const { rows } = await client.query('SELECT * FROM v_wtr_with_details');
 
-// const app = express();
-// const PORT = process.env.PORT || 3000;
-
-// /* ------------------------- Middleware ------------------------- */
-// app.use(cors({
-//   origin: process.env.NODE_ENV === 'production'
-//     ? ['https://iecc-db-approvals-ui-production-74a7.up.railway.app']
-//     : ['http://localhost:3000', 'http://127.0.0.1:3000'],
-//   credentials: true
-// }));
-// app.use(express.json());
-// app.use(clerkMiddleware());
-
-// /* ---------------------------- PostgreSQL ---------------------------- */
-// const must = (name) => {
-//   const v = process.env[name];
-//   if (!v) throw new Error(`Missing required env var: ${name}`);
-//   return v;
-// };
-
-// // PostgreSQL connection with Railway-specific configuration
-// const pool = new Pool({
-//   connectionString: process.env.DATABASE_URL || `postgresql://${must('PGUSER')}:${must('PGPASSWORD')}@${must('PGHOST')}:${process.env.PGPORT || 5432}/${must('PGDATABASE')}`,
-//   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-//   connectionTimeoutMillis: 30000,
-//   idleTimeoutMillis: 30000,
-//   max: 20,
-//   min: 5,
-// });
-
-// // Test database connection on startup with retry logic
-// async function connectWithRetry(retries = 5) {
-//   for (let i = 0; i < retries; i++) {
-//     try {
-//       const client = await pool.connect();
-//       console.log('✅ Database connected successfully');
-
-//       // Test basic query
-//       const result = await client.query('SELECT NOW()');
-//       console.log('✅ Database query test passed:', result.rows[0].now);
-
-//       client.release();
-//       return;
-//     } catch (err) {
-//       console.error(`❌ Database connection attempt ${i + 1} failed:`, err.message);
-//       if (i === retries - 1) {
-//         console.error('❌ All database connection attempts failed');
-//         throw err;
-//       }
-//       await new Promise(resolve => setTimeout(resolve, 2000));
-//     }
-//   }
-// }
-
-// // Initialize database connection
-// connectWithRetry().catch(err => {
-//   console.error('❌ Fatal: Could not connect to database:', err);
-//   process.exit(1);
-// });
-
-// /* ------------------------- Auth Helpers ------------------------- */
-// function getEmailFromClaims(claims = {}) {
-//   console.log('🔍 Full claims object:', JSON.stringify(claims, null, 2));
-
-//   // Enhanced email extraction with more debugging
-//   const possibleEmails = [
-//     claims.email,
-//     claims.email_address,
-//     claims.primary_email_address,
-//     claims.primaryEmailAddress?.emailAddress,
-//     Array.isArray(claims.email_addresses) ? claims.email_addresses[0] : null,
-//     Array.isArray(claims.emailAddresses) ? claims.emailAddresses[0]?.emailAddress : null,
-//     // Additional paths that might exist
-//     claims['https://clerk.dev/email'],
-//     claims['clerk/email'],
-//     claims.sub && claims.sub.includes('@') ? claims.sub : null // Sometimes sub contains email
-//   ];
-
-//   console.log('🔍 Possible email values:', possibleEmails);
-
-//   const foundEmail = possibleEmails.find(email => email && typeof email === 'string' && email.includes('@'));
-//   console.log('📧 Found email:', foundEmail);
-
-//   return foundEmail || null;
-// }
-
-// async function getUserFromClerk(userId) {
-//   try {
-//     // Try to fetch user data from Clerk API
-//     const response = await fetch(`https://api.clerk.dev/v1/users/${userId}`, {
-//       headers: {
-//         'Authorization': `Bearer ${process.env.CLERK_SECRET_KEY}`,
-//         'Content-Type': 'application/json',
-//       },
-//     });
-
-//     if (response.ok) {
-//       const userData = await response.json();
-//       console.log('📧 Fetched user from Clerk API:', userData.email_addresses?.[0]?.email_address);
-//       return userData.email_addresses?.[0]?.email_address;
-//     }
-//   } catch (err) {
-//     console.error('❌ Failed to fetch user from Clerk API:', err.message);
-//   }
-//   return null;
-// }
-
-// function requireAuthWithDbCheck(req, res, next) {
-//   return requireAuth()(req, res, async () => {
-//     try {
-//       console.log('🔐 Auth check starting...');
-//       console.log('Auth object keys:', Object.keys(req.auth || {}));
-//       console.log('Session claims:', req.auth?.sessionClaims);
-
-//       let email = getEmailFromClaims(req.auth?.sessionClaims) || getEmailFromClaims(req.auth?.claims);
-
-//       // If no email in claims, try fetching from Clerk API using the user ID
-//       if (!email && req.auth?.sessionClaims?.sub) {
-//         console.log('🔍 No email in claims, trying Clerk API...');
-//         email = await getUserFromClerk(req.auth.sessionClaims.sub);
-//       }
-
-//       if (!email) {
-//         console.log('❌ No email found in session claims or Clerk API');
-//         console.log('Available claims:', JSON.stringify(req.auth, null, 2));
-//         return res.status(403).json({
-//           error: 'Email not found in session',
-//           debug: {
-//             hasAuth: !!req.auth,
-//             hasSessionClaims: !!req.auth?.sessionClaims,
-//             claimsKeys: req.auth?.sessionClaims ? Object.keys(req.auth.sessionClaims) : [],
-//             userId: req.auth?.sessionClaims?.sub,
-//             suggestion: 'Check JWT template configuration in Clerk Dashboard'
-//           }
-//         });
-//       }
-
-//       const userEmail = String(email).toLowerCase().trim();
-//       console.log('🔍 Looking for user with email:', userEmail);
-
-//       const client = await pool.connect();
-//       try {
-//         // First, let's see what's in the authentication table
-//         const { rows: allAuth } = await client.query('SELECT employee_email FROM authentication LIMIT 10');
-//         console.log('📋 Sample authentication records:', allAuth.map(r => r.employee_email));
-
-//         const { rows } = await client.query(
-//           `SELECT employee_email, employee_name, employee_nuid
-//            FROM authentication
-//            WHERE LOWER(TRIM(employee_email)) = $1`,
-//           [userEmail]
-//         );
-
+    // Group by coda_wtr_id
+    const wtrMap = {};
+    for (const row of rows) {
+      const id = row.coda_wtr_id;
+      if (!wtrMap[id]) {
+        wtrMap[id] = {
+          coda_wtr_id: row.coda_wtr_id,
+          employee_nuid: row.employee_nuid,
+          employee_name: row.employee_name,
+          wtr_month: row.wtr_month,
+          wtr_year: row.wtr_year,
+          total_submitted_hours: row.total_submitted_hours,
+          expected_hours: row.expected_hours,
+          approval_status: row.approval_status,
+          activities: []
+        };
+      }
+      // Only push activity if it exists
+      if (row.coda_log_id) {
+        wtrMap[id].activities.push({
+          coda_log_id: row.coda_log_id,
+          project_name: row.project_name,
+          service_line: row.service_line,
+          activity: row.activity,
+          hours_submitted: row.hours_submitted,
+          tech_report_description: row.tech_report_description
+        });
+      }
+    }
+    const result = Object.values(wtrMap);
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching WTRs from view:', err);
+    res.status(500).json({
+      error: 'Failed to fetch WTR records',
+      details: process.env.DEBUG_DB_ERRORS ? err.message : undefined
+    });
+  } finally {
+    client.release();
+  }
+});
 //         console.log(`📊 Found ${rows.length} matching users in database`);
 
 //         if (rows.length === 0) {
