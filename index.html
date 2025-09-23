@@ -362,6 +362,52 @@
       font-size: 1.1rem;
     }
 
+    .pagination-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .pagination-info {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .rows-per-page {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .rows-per-page label {
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.9rem;
+    }
+
+    .rows-per-page select {
+      padding: 6px 10px;
+      min-width: 80px;
+      font-size: 0.9rem;
+    }
+
+    .pagination-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    #pageInfo {
+      font-weight: 500;
+      color: #374151;
+      font-size: 0.9rem;
+    }
+
     @media (max-width: 768px) {
       .controls {
         flex-direction: column;
@@ -511,11 +557,35 @@
     <div class="no-data" id="noData" style="display:none;">
       <p>No work time records found.</p>
     </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-container" id="paginationControls" style="display: none;">
+      <div class="pagination-info">
+        <div class="rows-per-page">
+          <label for="rowsPerPage">Rows per page:</label>
+          <select id="rowsPerPage">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+        <span id="pageInfo">Page 1 of 1</span>
+      </div>
+      <div class="pagination-buttons">
+        <button class="btn btn-secondary" onclick="prevPage()" id="prevBtn">Previous</button>
+        <button class="btn btn-secondary" onclick="nextPage()" id="nextBtn">Next</button>
+      </div>
+    </div>
   </div>
 
   <script>
     let wtrData = [], filteredData = [];
     let isInitialized = false;
+
+    // Pagination variables
+    let currentPage = 1;
+    let rowsPerPage = 10;
 
     // Enhanced fetch with better error handling
     async function authedFetch(url, options = {}) {
@@ -719,6 +789,7 @@
         return true;
       });
 
+      currentPage = 1; // Reset to first page when filters change
       renderData();
       updateStats();
     }
@@ -732,9 +803,11 @@
       return months[monthNumber - 1] || monthNumber;
     }
 
-    // Render table data with old-style activity details
+    // Render table data with pagination and full activity details
     function renderData() {
       const tbody = document.getElementById('dataTable');
+      const noDataDiv = document.getElementById('noData');
+      const paginationControls = document.getElementById('paginationControls');
 
       if (filteredData.length === 0) {
         tbody.innerHTML = `
@@ -744,10 +817,19 @@
             </td>
           </tr>
         `;
+        noDataDiv.style.display = 'block';
+        paginationControls.style.display = 'none';
         return;
       }
 
-      tbody.innerHTML = filteredData.map(record => `
+      noDataDiv.style.display = 'none';
+
+      // Calculate pagination
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const paginatedData = filteredData.slice(start, end);
+
+      tbody.innerHTML = paginatedData.map(record => `
         <tr data-id="${record.wtr_id}">
           <td>
             <div class="employee-details">
@@ -806,6 +888,40 @@
           </td>
         </tr>
       `).join('');
+
+      // Show pagination if needed
+      if (filteredData.length > rowsPerPage || currentPage > 1) {
+        paginationControls.style.display = 'flex';
+        updatePaginationControls();
+      } else {
+        paginationControls.style.display = 'none';
+      }
+    }
+
+    function updatePaginationControls() {
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      const startRecord = (currentPage - 1) * rowsPerPage + 1;
+      const endRecord = Math.min(currentPage * rowsPerPage, filteredData.length);
+
+      document.getElementById('pageInfo').textContent =
+        `Showing ${startRecord}-${endRecord} of ${filteredData.length} records (Page ${currentPage} of ${totalPages})`;
+      document.getElementById('prevBtn').disabled = currentPage === 1;
+      document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages === 0;
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderData();
+      }
+    }
+
+    function nextPage() {
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderData();
+      }
     }
 
     // Update record status
@@ -885,6 +1001,16 @@
 
       // Debug button
       document.getElementById('debugBtn').addEventListener('click', showDebugInfo);
+
+      // Pagination controls
+      const rowsSelector = document.getElementById('rowsPerPage');
+      if (rowsSelector) {
+        rowsSelector.addEventListener('change', function () {
+          rowsPerPage = parseInt(this.value);
+          currentPage = 1;
+          renderData();
+        });
+      }
     }
 
     // Show debug information
@@ -923,6 +1049,8 @@
 
     // Make updateStatus available globally
     window.updateStatus = updateStatus;
+    window.prevPage = prevPage;
+    window.nextPage = nextPage;
 
     // Start the application
     initApp().catch(error => {
