@@ -452,7 +452,7 @@
 //   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 // });
 
-// Updated server.js - Enhanced WTR endpoint to include activity details
+// // server.js - Updated email extraction and auth handling
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -570,7 +570,7 @@ async function getUserFromClerk(userId) {
 function requireAuthWithDbCheck(req, res, next) {
   return requireAuth()(req, res, async () => {
     try {
-      console.log('🔍 Auth check starting...');
+      console.log('🔐 Auth check starting...');
       console.log('Auth object keys:', Object.keys(req.auth || {}));
       console.log('Session claims:', req.auth?.sessionClaims);
 
@@ -676,7 +676,7 @@ app.get('/api/debug/dbinfo', async (req, res) => {
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = 'public' 
-        AND table_name IN ('work_time_records', 'authentication', 'employee', 'department', 'activity', 'project')
+        AND table_name IN ('work_time_records', 'authentication', 'employee', 'department')
       `);
 
       const tableNames = tables.map(t => t.table_name);
@@ -745,66 +745,32 @@ app.get('/api/departments', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
-// Enhanced WTR endpoint to include activity details
 app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   const client = await pool.connect();
   try {
-    console.log('📊 Fetching work time records with activity details...');
+    console.log('📊 Fetching work time records...');
 
-    // First get the work time records
-    const { rows: wtrRows } = await client.query(`
+    const { rows } = await client.query(`
       SELECT 
-        wtr.wtr_id,
         wtr.coda_wtr_id,
         wtr.wtr_month,
         wtr.wtr_year,
-        wtr.approval_status AS status,
-        wtr.total_submitted_hours,
-        wtr.expected_hours,
-        e.employee_nuid,
+        wtr.approval_status,
+        dsl.hours_submitted,
         e.employee_name,
-        e.employee_email,
-        e.employee_title,
-        COALESCE(d.department_name, 'Unassigned') as department_name
-      FROM work_time_records wtr
-      JOIN employee e ON wtr.employee_nuid = e.employee_nuid
-      LEFT JOIN department d ON e.department_id = d.department_id
-      ORDER BY wtr.wtr_year DESC, wtr.wtr_month DESC, e.employee_name
+        d.department_name,
+        p.deal_name AS project_name,
+        a.activity_name AS activity
+      FROM work_time_records AS wtr
+      JOIN employee AS e ON e.employee_nuid = wtr.employee_nuid
+      LEFT JOIN department AS d ON d.department_id = e.department_id
+      LEFT JOIN details_submission_logs dsl ON dsl.coda_wtr_id = wtr.coda_wtr_id
+      LEFT JOIN projects AS p ON p.project_id = dsl.project_id
+      LEFT JOIN activity AS a ON a.activity_id = dsl.activity_id
     `);
 
-    // For each WTR, get the associated activities
-    const enhancedRecords = await Promise.all(wtrRows.map(async (record) => {
-      try {
-        const { rows: activityRows } = await client.query(`
-          SELECT 
-            a.activity_id,
-            a.coda_log_id,
-            a.activity_name,
-            a.hours_submitted,
-            a.tech_report_description,
-            COALESCE(p.project_name, 'Unassigned Project') as project_name,
-            COALESCE(p.service_line, 'General') as service_line
-          FROM activity a
-          LEFT JOIN project p ON a.project_id = p.project_id
-          WHERE a.wtr_id = $1
-          ORDER BY a.activity_name
-        `, [record.wtr_id]);
-
-        return {
-          ...record,
-          activities: activityRows
-        };
-      } catch (err) {
-        console.error(`❌ Error fetching activities for WTR ${record.wtr_id}:`, err);
-        return {
-          ...record,
-          activities: []
-        };
-      }
-    }));
-
-    console.log(`✅ Fetched ${enhancedRecords.length} work time records with activities`);
-    res.json(enhancedRecords);
+    console.log(`✅ Fetched ${rows.length} work time records`);
+    res.json(rows);
   } catch (err) {
     console.error('❌ WTR query error:', err);
     res.status(500).json({
@@ -816,76 +782,55 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   }
 });
 
+// API to update the status of a Work Time Record
 app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
-  const id = Number(req.params.id);
-  const { status } = req.body || {};
+  const { id } = req.params;
+  const { status } = req.body;
+  const userEmail = req.user.employee_email;
+  console.log(`ℹ️ User ${userEmail} is attempting to update WTR ${id} to status: ${status}`);
 
-  if (!Number.isInteger(id) || id <= 0) {
-    return res.status(400).json({ error: 'Invalid WTR ID' });
-  }
-
-  const allowed = new Set(['pending', 'approved', 'rejected']);
-  const normalizedStatus = String(status).toLowerCase();
-
-  if (!allowed.has(normalizedStatus)) {
-    return res.status(400).json({
-      error: 'Invalid status',
-      allowed: Array.from(allowed)
-    });
+  if (!id || !status) {
+    return res.status(400).json({ error: 'Missing ID or status' });
   }
 
   const client = await pool.connect();
   try {
-    console.log(`🔄 Updating WTR ${id} status to ${normalizedStatus}`);
+    await client.query('BEGIN');
+    const updateQuery = 'UPDATE work_time_records SET approval_status = $1 WHERE coda_wtr_id = $2 RETURNING *';
+    const result = await client.query(updateQuery, [status, id]);
 
-    const { rowCount } = await client.query(
-      `UPDATE work_time_records 
-       SET approval_status = $1, updated_at = CURRENT_TIMESTAMP 
-       WHERE wtr_id = $2`,
-      [normalizedStatus, id]
-    );
-
-    if (rowCount === 0) {
-      return res.status(404).json({ error: 'Work time record not found' });
+    if (result.rowCount > 0) {
+      await client.query('COMMIT');
+      console.log(`✅ Successfully updated WTR ${id} to status: ${status}`);
+      res.json({ message: 'Status updated successfully', record: result.rows[0] });
+    } else {
+      await client.query('ROLLBACK');
+      console.log(`⚠️ WTR ${id} not found.`);
+      res.status(404).json({ error: 'Record not found' });
     }
-
-    console.log(`✅ Successfully updated WTR ${id}`);
-    res.json({ success: true, updated: rowCount });
   } catch (err) {
-    console.error('❌ Status update error:', err);
-    res.status(500).json({
-      error: 'Failed to update status',
-      details: process.env.NODE_ENV === 'development' ? err.message : 'Database error'
-    });
+    await client.query('ROLLBACK');
+    console.error('❌ Error updating record:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   } finally {
     client.release();
   }
 });
 
-/* ------------------------ HTML / Static ------------------------ */
-function serveHtml(fileName) {
+// Serve HTML files
+const serveHtml = (fileName) => {
   return (req, res) => {
-    const filePath = path.join(__dirname, fileName);
-    fs.readFile(filePath, 'utf8', (err, html) => {
-      if (err) {
-        console.error(`❌ Error reading ${fileName}:`, err);
-        return res.status(500).send(`
-          <h1>Server Error</h1>
-          <p>Could not load ${fileName}</p>
-          <p>Make sure the file exists in the project root.</p>
-        `);
-      }
-
-      const injected = html.replace(
-        /\$\{CLERK_PUBLISHABLE_KEY\}/g,
-        process.env.CLERK_PUBLISHABLE_KEY || ''
-      );
-
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.send(injected);
-    });
+    try {
+      let content = fs.readFileSync(path.join(__dirname, fileName), 'utf-8');
+      content = content.replace('${CLERK_PUBLISHABLE_KEY}', process.env.CLERK_PUBLISHABLE_KEY);
+      res.setHeader('Content-Type', 'text/html');
+      res.send(content);
+    } catch (err) {
+      console.error(`❌ Error serving ${fileName}:`, err);
+      res.status(500).send('Internal Server Error');
+    }
   };
-}
+};
 
 // Routes
 app.get('/', serveHtml('Sign in.html'));
@@ -930,12 +875,10 @@ const gracefulShutdown = () => {
 };
 
 process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
 
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);
-  console.log(`🔑 Sign in: http://localhost:${PORT}/sign-in`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Server listening on port ${PORT}`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`🔗 Local URL: http://localhost:${PORT}`);
+  }
 });
