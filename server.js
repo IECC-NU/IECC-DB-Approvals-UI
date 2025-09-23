@@ -969,12 +969,11 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
     await client.query('BEGIN');
     
     const updateQuery = `
-      UPDATE work_time_records 
-      SET approval_status = $1, 
-          updated_at = NOW()
-      WHERE coda_wtr_id = $2 
-      RETURNING coda_wtr_id, wtr_month, wtr_year, approval_status
-    `;
+        UPDATE work_time_records 
+        SET approval_status = $1
+        WHERE coda_wtr_id = $2 
+        RETURNING coda_wtr_id, wtr_month, wtr_year, approval_status
+      `;
     
     const result = await client.query(updateQuery, [status, id]);
 
