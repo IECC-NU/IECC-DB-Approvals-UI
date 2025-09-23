@@ -759,8 +759,11 @@
       const searchFilter = document.getElementById('searchEmployee').value.toLowerCase();
 
       filteredData = wtrData.filter(record => {
+        // Normalize status - check both 'status' and 'approval_status' fields
+        const recordStatus = record.status || record.approval_status || 'pending';
+
         // Status filter
-        if (statusFilter !== 'all' && record.status !== statusFilter) {
+        if (statusFilter !== 'all' && recordStatus !== statusFilter) {
           return false;
         }
 
@@ -853,26 +856,29 @@
           </td>
           <td>
             <div style="max-width: 300px;">
-              ${record.activities && record.activities.length > 0
+              ${record.activities && Array.isArray(record.activities) && record.activities.length > 0
           ? record.activities.map(activity => `
                     <div style="margin-bottom: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #4f46e5;">
-                      <strong>${activity.activity_name}</strong> (${activity.hours_submitted}h)<br>
-                      <small><strong>Project:</strong> ${activity.project_name}</small><br>
-                      <small><strong>Service Line:</strong> ${activity.service_line}</small><br>
-                      <small><strong>Description:</strong> ${activity.tech_report_description || 'No description'}</small><br>
-                      <small><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id}</small>
+                      <strong>${activity.activity_name || 'Unnamed Activity'}</strong> (${activity.hours_submitted || 0}h)<br>
+                      <small><strong>Project:</strong> ${activity.project_name || 'No Project'}</small><br>
+                      <small><strong>Service Line:</strong> ${activity.service_line || 'No Service Line'}</small><br>
+                      <small><strong>Description:</strong> ${activity.tech_report_description || 'No description provided'}</small><br>
+                      <small><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id || 'N/A'}</small>
                     </div>
                   `).join('')
-          : '<div style="color: #64748b; font-style: italic;">No activity details available</div>'
+          : `<div style="color: #64748b; font-style: italic; padding: 8px; background: #f9fafb; border-radius: 6px; border: 1px dashed #d1d5db;">
+               <strong>No activity details available</strong><br>
+               <small>This record may be missing activity data or the activities haven't been loaded yet.</small>
+             </div>`
         }
             </div>
           </td>
           <td>
-            <span class="status-${record.status}">${record.status.toUpperCase()}</span>
+            <span class="status-${record.status || record.approval_status || 'pending'}">${(record.status || record.approval_status || 'pending').toUpperCase()}</span>
           </td>
           <td>
             <div class="action-buttons">
-              ${record.status === 'pending' ? `
+              ${(record.status === 'pending' || record.approval_status === 'pending') ? `
                 <button class="btn btn-success" onclick="updateStatus(${record.wtr_id}, 'approved')">
                   Approve
                 </button>
@@ -940,10 +946,11 @@
         const result = await response.json();
 
         if (result.success) {
-          // Update local data
+          // Update local data - handle both field names
           const recordIndex = wtrData.findIndex(r => r.wtr_id === wtrId);
           if (recordIndex !== -1) {
             wtrData[recordIndex].status = newStatus;
+            wtrData[recordIndex].approval_status = newStatus; // Update both fields
           }
 
           // Re-apply filters and update display
@@ -968,9 +975,9 @@
     // Update statistics
     function updateStats() {
       const total = filteredData.length;
-      const pending = filteredData.filter(r => r.status === 'pending').length;
-      const approved = filteredData.filter(r => r.status === 'approved').length;
-      const rejected = filteredData.filter(r => r.status === 'rejected').length;
+      const pending = filteredData.filter(r => (r.status || r.approval_status || 'pending') === 'pending').length;
+      const approved = filteredData.filter(r => (r.status || r.approval_status) === 'approved').length;
+      const rejected = filteredData.filter(r => (r.status || r.approval_status) === 'rejected').length;
 
       document.getElementById('totalRecords').textContent = total;
       document.getElementById('pendingRecords').textContent = pending;
