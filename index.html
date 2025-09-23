@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IECC WTR Manager Dashboard</title>
 
+  <!-- Clerk (latest) -->
   <script async crossorigin="anonymous" data-clerk-publishable-key="${CLERK_PUBLISHABLE_KEY}"
     src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
     </script>
@@ -453,8 +454,10 @@
       <p>Approve and manage employee work time submissions</p>
     </div>
 
+    <!-- Error Display -->
     <div id="errorContainer" style="display: none;"></div>
 
+    <!-- Filters -->
     <div class="controls">
       <div class="control-group">
         <label>Filter by Status</label>
@@ -465,285 +468,451 @@
           <option value="rejected">Rejected</option>
         </select>
       </div>
+
       <div class="control-group">
         <label>Filter by Department</label>
         <select id="departmentFilter">
           <option value="all">All Departments</option>
         </select>
       </div>
+
       <div class="control-group">
-        <label>Search by Employee</label>
-        <input type="text" id="employeeSearch" placeholder="Type employee name...">
+        <label>Filter by Month</label>
+        <select id="monthFilter">
+          <option value="all">All Months</option>
+          <option value="1">January</option>
+          <option value="2">February</option>
+          <option value="3">March</option>
+          <option value="4">April</option>
+          <option value="5">May</option>
+          <option value="6">June</option>
+          <option value="7">July</option>
+          <option value="8">August</option>
+          <option value="9">September</option>
+          <option value="10">October</option>
+          <option value="11">November</option>
+          <option value="12">December</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Filter by Year</label>
+        <select id="yearFilter">
+          <option value="all">All Years</option>
+          <option value="2024">2024</option>
+          <option value="2025">2025</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Search Employee</label>
+        <input type="text" id="searchEmployee" placeholder="Search by name or email">
+      </div>
+
+      <button class="btn btn-primary" id="refreshBtn">Refresh Data</button>
+      <button class="btn btn-secondary" id="debugBtn">Debug Info</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="stats" id="statsContainer">
+      <div class="stat-card">
+        <h3 id="totalRecords">0</h3>
+        <p>Total Records</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="pendingRecords">0</h3>
+        <p>Pending Approval</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="approvedRecords">0</h3>
+        <p>Approved</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="rejectedRecords">0</h3>
+        <p>Rejected</p>
       </div>
     </div>
 
-    <div class="actions">
-      <button id="refreshButton">🔄 Refresh</button>
-      <button id="debugButton">🐛 Debug</button>
+    <div class="loading" id="loading">
+      <p>Loading data...</p>
     </div>
 
-    <div class="stats">
-      <div class="stat-card">
-        <h3 id="pendingCount">0</h3>
-        <p>Pending Records</p>
-      </div>
-      <div class="stat-card">
-        <h3 id="approvedCount">0</h3>
-        <p>Approved Records</p>
-      </div>
-      <div class="stat-card">
-        <h3 id="rejectedCount">0</h3>
-        <p>Rejected Records</p>
-      </div>
-      <div class="stat-card">
-        <h3 id="totalHours">0</h3>
-        <p>Total Submitted Hours</p>
-      </div>
-    </div>
-
+    <!-- Table -->
     <div class="table-container">
       <table>
         <thead>
           <tr>
-            <th>Employee</th>
-            <th>Month/Year</th>
-            <th>Project</th>
-            <th>Activity</th>
-            <th>Submitted Hours</th>
+            <th>Employee Info</th>
+            <th>Period</th>
+            <th>Hours</th>
+            <th>Activity Details</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
         </thead>
-        <tbody id="wtrTableBody">
-        </tbody>
+        <tbody id="dataTable"></tbody>
       </table>
     </div>
 
-    <div id="noDataMessage" class="no-data" style="display: none;">
-      No records found for the current filters.
+    <div class="no-data" id="noData" style="display:none;">
+      <p>No work time records found.</p>
     </div>
 
-    <div class="pagination-container">
+    <!-- Pagination Controls -->
+    <div class="pagination-container" id="paginationControls" style="display: none;">
       <div class="pagination-info">
         <div class="rows-per-page">
           <label for="rowsPerPage">Rows per page:</label>
           <select id="rowsPerPage">
-            <option value="10">10</option>
-            <option value="25" selected>25</option>
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
             <option value="50">50</option>
-            <option value="100">100</option>
           </select>
         </div>
-        <div id="pageInfo"></div>
+        <span id="pageInfo">Page 1 of 1</span>
       </div>
       <div class="pagination-buttons">
-        <button id="prevPageBtn" class="btn btn-secondary">Previous</button>
-        <button id="nextPageBtn" class="btn btn-secondary">Next</button>
+        <button class="btn btn-secondary" onclick="prevPage()" id="prevBtn">Previous</button>
+        <button class="btn btn-secondary" onclick="nextPage()" id="nextBtn">Next</button>
       </div>
     </div>
-
   </div>
 
   <script>
-    const CLERK_PUBLISHABLE_KEY = '${CLERK_PUBLISHABLE_KEY}';
-    let wtrData = [];
-    let filteredData = [];
+    let wtrData = [], filteredData = [];
+    let isInitialized = false;
+
+    // Pagination variables
     let currentPage = 1;
-    let rowsPerPage = 25;
-    const errorContainer = document.getElementById('errorContainer');
-    const tableBody = document.getElementById('wtrTableBody');
-    const noDataMessage = document.getElementById('noDataMessage');
+    let rowsPerPage = 10;
 
-    // Helper to fetch data with authentication token
+    // Enhanced fetch with better error handling
     async function authedFetch(url, options = {}) {
-      if (!window.Clerk || !window.Clerk.user) {
-        throw new Error('User not authenticated. Please sign in again.');
+      const headers = new Headers(options.headers || {});
+      headers.set('Content-Type', 'application/json');
+
+      try {
+        const token = await window.Clerk?.session?.getToken?.();
+        if (token) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+      } catch (err) {
+        console.warn('Could not get Clerk token:', err);
       }
-      const token = await window.Clerk.session.getToken();
-      options.headers = {
-        ...options.headers,
-        Authorization: `Bearer ${token}`
-      };
-      return fetch(url, options);
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+      }
+
+      return response;
     }
 
-    function showMessage(type, title, message) {
-      errorContainer.style.display = 'block';
-      errorContainer.innerHTML = `
+    // Error display helper
+    function showError(message, details = null) {
+      const container = document.getElementById('errorContainer');
+      container.innerHTML = `
         <div class="error">
-          <h3>${title}</h3>
+          <h3>Error</h3>
           <p>${message}</p>
+          ${details ? `<details><summary>Technical Details</summary><div class="debug-info">${details}</div></details>` : ''}
         </div>
       `;
+      container.style.display = 'block';
     }
 
-    function showError(title, message) {
-      errorContainer.className = 'error';
-      errorContainer.style.display = 'block';
-      errorContainer.innerHTML = `
-        <div class="error">
-          <h3>${title}</h3>
-          <p>${message}</p>
-        </div>
-      `;
+    function hideError() {
+      document.getElementById('errorContainer').style.display = 'none';
     }
 
-    function showSuccess(title, message) {
-      errorContainer.className = 'success';
-      errorContainer.style.display = 'block';
-      errorContainer.innerHTML = `
-        <div class="success">
-          <h3>${title}</h3>
-          <p>${message}</p>
-        </div>
-      `;
+    // Wait for Clerk to load
+    const waitForClerk = () => new Promise((resolve, reject) => {
+      const start = Date.now();
+      const checkInterval = setInterval(() => {
+        if (window.Clerk && typeof window.Clerk.load === 'function') {
+          clearInterval(checkInterval);
+          resolve();
+        } else if (Date.now() - start > 15000) {
+          clearInterval(checkInterval);
+          reject(new Error('Clerk SDK failed to load within 15 seconds'));
+        }
+      }, 100);
+    });
+
+    // Initialize the application
+    async function initApp() {
+      try {
+        hideError();
+        console.log('Initializing application...');
+
+        await waitForClerk();
+        await window.Clerk.load();
+
+        if (!window.Clerk.user) {
+          console.log('User not authenticated, redirecting to sign-in');
+          window.location.href = '/sign-in';
+          return;
+        }
+
+        const user = window.Clerk.user;
+        const userEmail = user.primaryEmailAddress?.emailAddress || 'Signed in';
+        document.getElementById('userDisplay').textContent = userEmail;
+
+        document.getElementById('signOutBtn').onclick = async () => {
+          try {
+            await window.Clerk.signOut();
+            window.location.href = '/sign-in';
+          } catch (err) {
+            console.error('Sign out error:', err);
+          }
+        };
+
+        console.log('Authentication successful');
+
+        // Load initial data
+        await loadData();
+        await populateDepartments();
+        applyFilters();
+        updateStats();
+
+        // Set up event listeners
+        setupEventListeners();
+
+        isInitialized = true;
+        console.log('Application initialized successfully');
+
+      } catch (error) {
+        console.error('Initialization error:', error);
+        showError(
+          'Failed to initialize the application. Please refresh the page.',
+          error.message
+        );
+      }
     }
 
-    async function fetchData() {
-      showLoading(true);
-      errorContainer.style.display = 'none';
-      noDataMessage.style.display = 'none';
+    // Load work time records
+    async function loadData() {
+      console.log('Loading work time records...');
+      document.getElementById('loading').classList.add('show');
 
       try {
         const response = await authedFetch('/api/wtr');
-        if (!response.ok) {
-          if (response.status === 403) {
-            const error = await response.json();
-            showError('Access Denied', error.hint || 'You are not authorized to view this data. Please contact your administrator.');
-          } else {
-            throw new Error(`Server returned status: ${response.status}`);
-          }
-        }
         wtrData = await response.json();
-        applyFilters();
-        updateStats();
+        filteredData = [...wtrData];
+
+        console.log(`Loaded ${wtrData.length} work time records`);
+
+        if (wtrData.length === 0) {
+          document.getElementById('noData').style.display = 'block';
+        } else {
+          document.getElementById('noData').style.display = 'none';
+        }
+
       } catch (error) {
-        console.error('Failed to fetch data:', error);
-        showError('Data Fetch Failed', error.message);
+        console.error('Failed to load work time records:', error);
+        showError('Failed to load work time records', error.message);
+        wtrData = [];
+        filteredData = [];
       } finally {
-        showLoading(false);
+        document.getElementById('loading').classList.remove('show');
       }
     }
 
-    async function fetchDepartments() {
+    // Load departments for filter
+    async function populateDepartments() {
       try {
+        console.log('Loading departments...');
         const response = await authedFetch('/api/departments');
         const departments = await response.json();
-        const departmentFilter = document.getElementById('departmentFilter');
+
+        const select = document.getElementById('departmentFilter');
+        select.innerHTML = '<option value="all">All Departments</option>';
+
         departments.forEach(dept => {
           const option = document.createElement('option');
           option.value = dept.department_name;
           option.textContent = dept.department_name;
-          departmentFilter.appendChild(option);
+          select.appendChild(option);
         });
+
+        console.log(`Loaded ${departments.length} departments`);
+
       } catch (error) {
-        console.error('Failed to fetch departments:', error);
+        console.error('Failed to load departments:', error);
+        showError('Failed to load departments', error.message);
       }
     }
 
+    // Apply filters to data
     function applyFilters() {
-      const status = document.getElementById('statusFilter').value;
-      const department = document.getElementById('departmentFilter').value;
-      const search = document.getElementById('employeeSearch').value.toLowerCase();
+      const statusFilter = document.getElementById('statusFilter').value;
+      const departmentFilter = document.getElementById('departmentFilter').value;
+      const monthFilter = document.getElementById('monthFilter').value;
+      const yearFilter = document.getElementById('yearFilter').value;
+      const searchFilter = document.getElementById('searchEmployee').value.toLowerCase();
 
-      filteredData = wtrData.filter(row => {
-        const statusMatch = status === 'all' || row.approval_status.toLowerCase() === status;
-        const departmentMatch = department === 'all' || row.department_name === department;
-        const employeeMatch = row.employee_name.toLowerCase().includes(search);
-        return statusMatch && departmentMatch && employeeMatch;
+      filteredData = wtrData.filter(record => {
+        // Normalize status - check both 'status' and 'approval_status' fields
+        const recordStatus = record.status || record.approval_status || 'pending';
+
+        // Status filter
+        if (statusFilter !== 'all' && recordStatus !== statusFilter) {
+          return false;
+        }
+
+        // Department filter
+        if (departmentFilter !== 'all' && record.department_name !== departmentFilter) {
+          return false;
+        }
+
+        // Month filter
+        if (monthFilter !== 'all' && record.wtr_month != monthFilter) {
+          return false;
+        }
+
+        // Year filter
+        if (yearFilter !== 'all' && record.wtr_year != yearFilter) {
+          return false;
+        }
+
+        // Search filter
+        if (searchFilter &&
+          !record.employee_name.toLowerCase().includes(searchFilter) &&
+          !record.employee_email.toLowerCase().includes(searchFilter)) {
+          return false;
+        }
+
+        return true;
       });
 
-      currentPage = 1;
+      currentPage = 1; // Reset to first page when filters change
       renderData();
+      updateStats();
     }
 
+    // Helper function to get month name
+    function getMonthName(monthNumber) {
+      const months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      return months[monthNumber - 1] || monthNumber;
+    }
+
+    // Render table data with pagination and full activity details
     function renderData() {
-      const tableBody = document.getElementById('wtrTableBody');
-      tableBody.innerHTML = '';
+      const tbody = document.getElementById('dataTable');
+      const noDataDiv = document.getElementById('noData');
+      const paginationControls = document.getElementById('paginationControls');
+
+      if (filteredData.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">
+              No records match your current filters
+            </td>
+          </tr>
+        `;
+        noDataDiv.style.display = 'block';
+        paginationControls.style.display = 'none';
+        return;
+      }
+
+      noDataDiv.style.display = 'none';
+
+      // Calculate pagination
       const start = (currentPage - 1) * rowsPerPage;
       const end = start + rowsPerPage;
       const paginatedData = filteredData.slice(start, end);
 
-      if (paginatedData.length === 0) {
-        noDataMessage.style.display = 'block';
-        return;
-      }
-
-      paginatedData.forEach(row => {
-        const tr = document.createElement('tr');
-        let statusClass = '';
-        if (row.approval_status) {
-          statusClass = `status-${row.approval_status.toLowerCase()}`;
-        }
-        tr.innerHTML = `
-          <td>${row.employee_name}</td>
-          <td>${row.wtr_month}/${row.wtr_year}</td>
-          <td>${row.project_name || 'N/A'}</td>
-          <td>${row.activity || 'N/A'}</td>
-          <td>${row.hours_submitted}</td>
-          <td><span class="${statusClass}">${row.approval_status}</span></td>
-          <td class="action-buttons">
-            <button onclick="updateStatus('${row.coda_wtr_id}', 'Approved', this)" class="btn btn-success">✅ Approve</button>
-            <button onclick="updateStatus('${row.coda_wtr_id}', 'Rejected', this)" class="btn btn-danger">❌ Reject</button>
+      tbody.innerHTML = paginatedData.map(record => `
+        <tr data-id="${record.wtr_id}">
+          <td>
+            <div class="employee-details">
+              <strong>${record.employee_name}</strong><br>
+              <small>NUID: ${record.employee_nuid}</small><br>
+              <small>${record.employee_email}</small><br>
+              <small>${record.employee_title || 'N/A'}</small><br>
+              <small><em>${record.department_name || 'Unassigned'}</em></small>
+            </div>
           </td>
-        `;
-        tableBody.appendChild(tr);
-      });
-
-      updatePaginationInfo();
-      noDataMessage.style.display = 'none';
-    }
-
-    async function updateStatus(coda_wtr_id, status, button) {
-      const originalText = button.innerHTML;
-      button.innerHTML = '...';
-      button.disabled = true;
-
-      try {
-        const response = await authedFetch(`/api/wtr/${coda_wtr_id}/status`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ status: status }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Server returned status: ${response.status}`);
+          <td>
+            <strong>${getMonthName(record.wtr_month)} ${record.wtr_year}</strong><br>
+            <small>WTR ID: ${record.coda_wtr_id || record.wtr_id}</small>
+          </td>
+          <td>
+            <div class="hours-info">
+              <strong>Submitted: ${record.total_submitted_hours}h</strong><br>
+              <small>Expected: ${record.expected_hours}h</small><br>
+              <small>Variance: ${(record.total_submitted_hours - record.expected_hours).toFixed(2)}h</small>
+            </div>
+          </td>
+          <td>
+            <div style="max-width: 300px;">
+              ${record.activities && Array.isArray(record.activities) && record.activities.length > 0
+          ? record.activities.map(activity => `
+                    <div style="margin-bottom: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #4f46e5;">
+                      <strong>${activity.activity_name || 'Unnamed Activity'}</strong> (${activity.hours_submitted || 0}h)<br>
+                      <small><strong>Project:</strong> ${activity.project_name || 'No Project'}</small><br>
+                      <small><strong>Service Line:</strong> ${activity.service_line || 'No Service Line'}</small><br>
+                      <small><strong>Description:</strong> ${activity.tech_report_description || 'No description provided'}</small><br>
+                      <small><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id || 'N/A'}</small>
+                    </div>
+                  `).join('')
+          : `<div style="color: #64748b; font-style: italic; padding: 8px; background: #f9fafb; border-radius: 6px; border: 1px dashed #d1d5db;">
+               <strong>No activity details available</strong><br>
+               <small>This record may be missing activity data or the activities haven't been loaded yet.</small>
+             </div>`
         }
+            </div>
+          </td>
+          <td>
+            <span class="status-${record.status || record.approval_status || 'pending'}">${(record.status || record.approval_status || 'pending').toUpperCase()}</span>
+          </td>
+          <td>
+            <div class="action-buttons">
+              ${(record.status === 'pending' || record.approval_status === 'pending') ? `
+                <button class="btn btn-success" onclick="updateStatus(${record.wtr_id}, 'approved')">
+                  Approve
+                </button>
+                <button class="btn btn-danger" onclick="updateStatus(${record.wtr_id}, 'rejected')">
+                  Reject
+                </button>
+              ` : `
+                <button class="btn btn-primary" onclick="updateStatus(${record.wtr_id}, 'pending')" style="font-size: 0.8rem; padding: 6px 12px;">
+                  Reset to Pending
+                </button>
+              `}
+            </div>
+          </td>
+        </tr>
+      `).join('');
 
-        const result = await response.json();
-        console.log('Update successful:', result);
-        showSuccess('Success', `Record updated to: ${status}`);
-        await fetchDataAndRender();
-
-      } catch (error) {
-        console.error('Update failed:', error);
-        showError('Update Failed', error.message);
-      } finally {
-        button.innerHTML = originalText;
-        button.disabled = false;
+      // Show pagination if needed
+      if (filteredData.length > rowsPerPage || currentPage > 1) {
+        paginationControls.style.display = 'flex';
+        updatePaginationControls();
+      } else {
+        paginationControls.style.display = 'none';
       }
     }
 
-
-    function updateStats() {
-      const pendingCount = wtrData.filter(row => row.approval_status === 'Pending').length;
-      const approvedCount = wtrData.filter(row => row.approval_status === 'Approved').length;
-      const rejectedCount = wtrData.filter(row => row.approval_status === 'Rejected').length;
-      const totalHours = wtrData.reduce((sum, row) => sum + (row.hours_submitted || 0), 0);
-
-      document.getElementById('pendingCount').textContent = pendingCount;
-      document.getElementById('approvedCount').textContent = approvedCount;
-      document.getElementById('rejectedCount').textContent = rejectedCount;
-      document.getElementById('totalHours').textContent = totalHours.toFixed(2);
-    }
-
-    function updatePaginationInfo() {
+    function updatePaginationControls() {
       const totalPages = Math.ceil(filteredData.length / rowsPerPage);
-      document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages} (${filteredData.length} records)`;
-      document.getElementById('prevPageBtn').disabled = currentPage === 1;
-      document.getElementById('nextPageBtn').disabled = currentPage === totalPages || filteredData.length === 0;
+      const startRecord = (currentPage - 1) * rowsPerPage + 1;
+      const endRecord = Math.min(currentPage * rowsPerPage, filteredData.length);
+
+      document.getElementById('pageInfo').textContent =
+        `Showing ${startRecord}-${endRecord} of ${filteredData.length} records (Page ${currentPage} of ${totalPages})`;
+      document.getElementById('prevBtn').disabled = currentPage === 1;
+      document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages === 0;
     }
 
     function prevPage() {
@@ -761,68 +930,93 @@
       }
     }
 
-    function showLoading(show) {
-      document.querySelector('.loading').classList.toggle('show', show);
-      document.getElementById('wtrTableBody').style.opacity = show ? '0.5' : '1';
-    }
-
-    async function fetchDataAndRender() {
-      await fetchData();
-      renderData();
-    }
-
-    async function initApp() {
+    // Update record status
+    async function updateStatus(wtrId, newStatus) {
       try {
-        await new Promise((resolve, reject) => {
-          if (window.Clerk) {
-            resolve();
-          } else {
-            window.addEventListener('load', () => {
-              if (window.Clerk) {
-                resolve();
-              } else {
-                reject(new Error('Clerk JS failed to load.'));
-              }
-            });
-          }
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = 'Updating...';
+        button.disabled = true;
+
+        const response = await authedFetch(`/api/wtr/${wtrId}/status`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: newStatus })
         });
 
-        await window.Clerk.load();
-        if (!window.Clerk.user) {
-          window.location.href = '/sign-in';
-          return;
+        const result = await response.json();
+
+        if (result.success) {
+          // Update local data - handle both field names
+          const recordIndex = wtrData.findIndex(r => r.wtr_id === wtrId);
+          if (recordIndex !== -1) {
+            wtrData[recordIndex].status = newStatus;
+            wtrData[recordIndex].approval_status = newStatus; // Update both fields
+          }
+
+          // Re-apply filters and update display
+          applyFilters();
+
+          console.log(`Updated WTR ${wtrId} to ${newStatus}`);
+        } else {
+          throw new Error(result.error || 'Update failed');
         }
 
-        const userEmail = window.Clerk.user.primaryEmailAddress.emailAddress;
-        document.getElementById('userDisplay').textContent = userEmail;
-        document.getElementById('signOutBtn').addEventListener('click', () => {
-          window.Clerk.signOut(() => {
-            window.location.href = '/sign-in';
-          });
-        });
+      } catch (error) {
+        console.error('Status update failed:', error);
+        showError(`Failed to update status: ${error.message}`);
 
-        // Initialize event listeners for filters and pagination
-        document.getElementById('statusFilter').addEventListener('change', applyFilters);
-        document.getElementById('departmentFilter').addEventListener('change', applyFilters);
-        document.getElementById('employeeSearch').addEventListener('input', applyFilters);
-        document.getElementById('rowsPerPage').addEventListener('change', function () {
+        // Reset button
+        const button = event.target;
+        button.textContent = originalText;
+        button.disabled = false;
+      }
+    }
+
+    // Update statistics
+    function updateStats() {
+      const total = filteredData.length;
+      const pending = filteredData.filter(r => (r.status || r.approval_status || 'pending') === 'pending').length;
+      const approved = filteredData.filter(r => (r.status || r.approval_status) === 'approved').length;
+      const rejected = filteredData.filter(r => (r.status || r.approval_status) === 'rejected').length;
+
+      document.getElementById('totalRecords').textContent = total;
+      document.getElementById('pendingRecords').textContent = pending;
+      document.getElementById('approvedRecords').textContent = approved;
+      document.getElementById('rejectedRecords').textContent = rejected;
+    }
+
+    // Set up event listeners
+    function setupEventListeners() {
+      // Filter change events
+      ['statusFilter', 'departmentFilter', 'monthFilter', 'yearFilter'].forEach(id => {
+        document.getElementById(id).addEventListener('change', applyFilters);
+      });
+
+      // Search input with debounce
+      let searchTimeout;
+      document.getElementById('searchEmployee').addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(applyFilters, 300);
+      });
+
+      // Refresh button
+      document.getElementById('refreshBtn').addEventListener('click', async () => {
+        await loadData();
+        await populateDepartments();
+        applyFilters();
+      });
+
+      // Debug button
+      document.getElementById('debugBtn').addEventListener('click', showDebugInfo);
+
+      // Pagination controls
+      const rowsSelector = document.getElementById('rowsPerPage');
+      if (rowsSelector) {
+        rowsSelector.addEventListener('change', function () {
           rowsPerPage = parseInt(this.value);
           currentPage = 1;
           renderData();
         });
-        document.getElementById('prevPageBtn').addEventListener('click', prevPage);
-        document.getElementById('nextPageBtn').addEventListener('click', nextPage);
-
-        // Debug button
-        document.getElementById('debugButton').addEventListener('click', showDebugInfo);
-
-        // Initial data fetch
-        await fetchDataAndRender();
-        await fetchDepartments();
-
-      } catch (error) {
-        console.error('Fatal initialization error:', error);
-        showError('Application failed to start', error.message);
       }
     }
 
@@ -870,6 +1064,7 @@
       console.error('Fatal initialization error:', error);
       showError('Application failed to start', error.message);
     });
+
   </script>
 </body>
 
