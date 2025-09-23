@@ -845,7 +845,7 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
     // Step 2: Get all activities for these WTRs
     const activitiesQuery = `
       SELECT 
-        COALESCE(dsl.coda_wtr_id, CAST(wtr.wtr_id AS VARCHAR)) as coda_wtr_id,
+        wtr.wtr_id,
         dsl.coda_log_id,
         dsl.activity_id,
         dsl.project_id,
@@ -855,11 +855,13 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
         p.deal_name AS project_name,
         p.service_line
       FROM work_time_records wtr
-      LEFT JOIN details_submission_logs dsl ON dsl.coda_wtr_id = CAST(COALESCE(wtr.coda_wtr_id, wtr.wtr_id::text) AS VARCHAR)
+      LEFT JOIN details_submission_logs dsl ON 
+        (dsl.coda_wtr_id = CAST(wtr.wtr_id AS VARCHAR) OR 
+         dsl.coda_wtr_id = wtr.coda_wtr_id)
       LEFT JOIN activity a ON a.activity_id = dsl.activity_id
       LEFT JOIN projects p ON p.project_id = dsl.project_id
       WHERE wtr.wtr_id = ANY($1)
-      ORDER BY dsl.coda_wtr_id, dsl.coda_log_id
+      ORDER BY wtr.wtr_id, dsl.coda_log_id
     `;
 
     const wtrIds = wtrRows.map(row => row.wtr_id).filter(v => v !== null && v !== undefined);
@@ -966,13 +968,12 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // Use coda_wtr_id instead of a generic id field
     const updateQuery = `
       UPDATE work_time_records 
       SET approval_status = $1, 
           updated_at = NOW()
-      WHERE coda_wtr_id = $2 
-      RETURNING coda_wtr_id, wtr_month, wtr_year, approval_status
+      WHERE wtr_id = $2 
+      RETURNING wtr_id, wtr_month, wtr_year, approval_status
     `;
     
     const result = await client.query(updateQuery, [status, id]);
