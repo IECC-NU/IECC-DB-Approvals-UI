@@ -845,7 +845,7 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
     // Step 2: Get all activities for these WTRs
     const activitiesQuery = `
       SELECT 
-        wtr.wtr_id,
+        wtr.coda_wtr_id,
         dsl.coda_log_id,
         dsl.activity_id,
         dsl.project_id,
@@ -853,18 +853,16 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
         dsl.tech_report_description,
         a.activity_name,
         p.deal_name AS project_name,
-        p.service_line
+        COALESCE(p.service_line, '') as service_line
       FROM work_time_records wtr
-      LEFT JOIN details_submission_logs dsl ON 
-        (dsl.coda_wtr_id = CAST(wtr.wtr_id AS VARCHAR) OR 
-         dsl.coda_wtr_id = wtr.coda_wtr_id)
+      LEFT JOIN details_submission_logs dsl ON dsl.coda_wtr_id = wtr.coda_wtr_id
       LEFT JOIN activity a ON a.activity_id = dsl.activity_id
       LEFT JOIN projects p ON p.project_id = dsl.project_id
-      WHERE wtr.wtr_id = ANY($1)
-      ORDER BY wtr.wtr_id, dsl.coda_log_id
+      WHERE wtr.coda_wtr_id = ANY($1)
+      ORDER BY wtr.coda_wtr_id, dsl.coda_log_id
     `;
 
-    const wtrIds = wtrRows.map(row => row.wtr_id).filter(v => v !== null && v !== undefined);
+    const wtrIds = wtrRows.map(row => row.coda_wtr_id).filter(v => v !== null && v !== undefined);
     let activityRows = [];
     if (wtrIds.length > 0) {
       try {
@@ -887,16 +885,18 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
       if (!activitiesMap[wtrId]) {
         activitiesMap[wtrId] = [];
       }
-      activitiesMap[wtrId].push({
-        coda_log_id: activity.coda_log_id,
-        activity_id: activity.activity_id,
-        activity_name: activity.activity_name,
-        project_id: activity.project_id,
-        project_name: activity.project_name,
-        service_line: activity.service_line,
-        hours_submitted: parseFloat(activity.hours_submitted) || 0,
-        tech_report_description: activity.tech_report_description
-      });
+      if (activity.activity_id || activity.project_id || activity.hours_submitted) {
+        activitiesMap[wtrId].push({
+          coda_log_id: activity.coda_log_id,
+          activity_id: activity.activity_id,
+          activity_name: activity.activity_name || 'Unnamed Activity',
+          project_id: activity.project_id,
+          project_name: activity.project_name || 'No Project',
+          service_line: activity.service_line || '',
+          hours_submitted: parseFloat(activity.hours_submitted) || 0,
+          tech_report_description: activity.tech_report_description || ''
+        });
+      }
     });
 
     // Step 4: Combine WTR data with activities and calculate totals
@@ -972,8 +972,8 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
       UPDATE work_time_records 
       SET approval_status = $1, 
           updated_at = NOW()
-      WHERE wtr_id = $2 
-      RETURNING wtr_id, wtr_month, wtr_year, approval_status
+      WHERE coda_wtr_id = $2 
+      RETURNING coda_wtr_id, wtr_month, wtr_year, approval_status
     `;
     
     const result = await client.query(updateQuery, [status, id]);
