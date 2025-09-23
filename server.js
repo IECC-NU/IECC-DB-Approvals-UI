@@ -822,7 +822,8 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}
+);
 
 // FIXED: Update WTR status endpoint
 app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
