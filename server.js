@@ -477,10 +477,18 @@ app.use(cors({
 app.use(express.json());
 
 const DISABLE_AUTH = String(process.env.DISABLE_AUTH || '').toLowerCase() === 'true';
-if (!DISABLE_AUTH && typeof clerkMiddleware === 'function') {
+// AUTH_DISABLED reflects whether we should bypass Clerk-based authentication.
+// If Clerk's requireAuth is not available (package not installed), force-disable auth
+let AUTH_DISABLED = DISABLE_AUTH;
+if (!AUTH_DISABLED && typeof requireAuth !== 'function') {
+  console.warn('⚠️ Clerk requireAuth is not available; falling back to disabled auth for development. Set DISABLE_AUTH=false and install @clerk/express to enable full auth.');
+  AUTH_DISABLED = true;
+}
+
+if (!AUTH_DISABLED && typeof clerkMiddleware === 'function') {
   app.use(clerkMiddleware());
 } else {
-  console.log('⚠️ Authentication is disabled (DISABLE_AUTH=true).');
+  console.log('⚠️ Authentication disabled or Clerk not present; running in dev auth-bypass mode.');
 }
 
 /* ---------------------------- PostgreSQL ---------------------------- */
@@ -567,14 +575,20 @@ async function getUserFromClerk(userId) {
 }
 
 function requireAuthWithDbCheck(req, res, next) {
-  if (DISABLE_AUTH) {
-    // Development bypass
+  if (AUTH_DISABLED) {
+    // Development bypass: allow running without Clerk configured.
     req.user = {
-      employee_email: process.env.DEV_USER_EMAIL || 'dev@iecc.edu',
-      employee_name: 'Development User',
-      employee_nuid: 'DEV001'
+      employee_email: (process.env.DEV_USER_EMAIL || 'dev@iecc.edu').toLowerCase(),
+      employee_name: process.env.DEV_USER_NAME || 'Development User',
+      employee_nuid: process.env.DEV_USER_NUID || 'DEV001'
     };
     return next();
+  }
+
+  // Ensure requireAuth is available before invoking it
+  if (typeof requireAuth !== 'function') {
+    console.error('❌ requireAuth is not a function but AUTH_DISABLED is false. Failing safe.');
+    return res.status(500).json({ error: 'Authentication middleware not available' });
   }
 
   return requireAuth()(req, res, async () => {
@@ -791,9 +805,15 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
       ORDER BY dsl.coda_wtr_id, dsl.coda_log_id
     `;
 
-    const wtrIds = wtrRows.map(row => row.coda_wtr_id);
-    const { rows: activityRows } = await client.query(activitiesQuery, [wtrIds]);
-    console.log(`✅ Fetched ${activityRows.length} activity records`);
+    const wtrIds = wtrRows.map(row => row.coda_wtr_id).filter(v => v !== null && v !== undefined);
+    let activityRows = [];
+    if (wtrIds.length > 0) {
+      const { rows: fetchedActivities } = await client.query(activitiesQuery, [wtrIds]);
+      activityRows = fetchedActivities;
+      console.log(`✅ Fetched ${activityRows.length} activity records`);
+    } else {
+      console.log('ℹ️ No WTR IDs found; skipping activities query');
+    }
 
     // Step 3: Group activities by WTR ID
     const activitiesMap = {};
@@ -820,7 +840,8 @@ app.get('/api/wtr', requireAuthWithDbCheck, async (req, res) => {
       const totalHours = activities.reduce((sum, activity) => sum + (activity.hours_submitted || 0), 0);
       
       return {
-        wtr_id: wtr.wtr_id,
+        // Normalize wtr_id to a number when possible, but keep original if not
+        wtr_id: Number(wtr.coda_wtr_id) || wtr.coda_wtr_id,
         coda_wtr_id: wtr.coda_wtr_id,
         wtr_month: wtr.wtr_month,
         wtr_year: wtr.wtr_year,
@@ -896,6 +917,7 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
       await client.query('COMMIT');
       console.log(`✅ Successfully updated WTR ${id} to status: ${status}`);
       res.json({ 
+        ok: true,
         success: true,
         message: 'Status updated successfully', 
         record: result.rows[0] 
@@ -904,6 +926,7 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
       await client.query('ROLLBACK');
       console.log(`⚠️ WTR ${id} not found.`);
       res.status(404).json({ 
+        ok: false,
         success: false,
         error: 'Record not found' 
       });
@@ -912,6 +935,7 @@ app.put('/api/wtr/:id/status', requireAuthWithDbCheck, async (req, res) => {
     await client.query('ROLLBACK');
     console.error('❌ Error updating record:', err);
     res.status(500).json({ 
+      ok: false,
       success: false,
       error: 'Internal server error', 
       details: process.env.NODE_ENV === 'development' ? err.message : 'Database error'
