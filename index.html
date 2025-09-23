@@ -847,11 +847,11 @@
 
       return activities.map(activity => `
         <div class="activity-item">
-          <strong>${activity.activity_name || 'Unnamed Activity'}</strong> (${activity.hours_submitted || 0}h)<br>
-          <small><strong>Project:</strong> ${activity.project_name || 'No Project'}</small><br>
+          <strong>${activity.project_name || 'No Project'}</strong> (${activity.hours_submitted || 0}h)<br>
+          <small><strong>Activity:</strong> ${activity.activity || ''}</small><br>
           <small><strong>Service Line:</strong> ${activity.service_line || 'No Service Line'}</small><br>
           <small><strong>Description:</strong> ${activity.tech_report_description || 'No description provided'}</small><br>
-          <small><strong>Log ID:</strong> ${activity.coda_log_id || activity.activity_id || 'N/A'}</small>
+          <small><strong>Log ID:</strong> ${activity.coda_log_id || 'N/A'}</small>
         </div>
       `).join('');
     }
@@ -893,10 +893,7 @@
             <td>
               <div class="employee-details">
                 <strong>${record.employee_name}</strong><br>
-                <small>NUID: ${record.employee_nuid}</small><br>
-                <small>${record.employee_email}</small><br>
-                <small>${record.employee_title || 'N/A'}</small><br>
-                <small><em>${record.department_name || 'Unassigned'}</em></small>
+                <small>NUID: ${record.employee_nuid}</small>
               </div>
             </td>
             <td>
